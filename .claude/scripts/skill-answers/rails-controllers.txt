@@ -1,0 +1,22 @@
+# Answer Guidelines: rails-controllers
+
+## Must Cover
+- Use namespaced API controller structure under `Api::V1` with proper route namespacing (`namespace :api do namespace :v1 do`)
+- Implement `before_action` filters for authentication (`authenticate_user!`) and authorization (`authorize`) on appropriate actions
+- Define strong parameters using `params.require(:resource).permit(...)` in a private method
+- Delegate complex business logic to a service object (e.g., `Posts::CreateService`) that returns a Result object with `success?`/`failure?` interface
+- Implement multi-tenant scoping by scoping all queries through `current_user` or `current_tenant` (e.g., `current_user.posts` instead of `Post.all`)
+- Include consistent error handling via a `rescue_from` concern (ApiErrorHandling) that handles `ActiveRecord::RecordNotFound`, `ActiveRecord::RecordInvalid`, `Pundit::NotAuthorizedError`, and `ActionController::ParameterMissing`
+- Return proper HTTP status codes: `:created` for POST success, `:no_content` for DELETE, `:unprocessable_entity` for validation failures, `:not_found` for missing records, `:forbidden` for unauthorized access
+- Use Pundit policy objects (e.g., `PostPolicy`) with `authorize @resource` for action-level authorization checks
+
+## Must NOT Do
+- Must NOT put business logic (mailers, analytics, search indexing) directly in controller actions (use service objects instead)
+- Must NOT return inconsistent error response formats across different actions or controllers
+- Must NOT skip authentication or authorization checks on destructive actions (update, destroy)
+
+## Code Examples Must Include
+- A controller class inside `module Api module V1` with `before_action` for authentication and `set_resource` pattern
+- A private `post_params` (or equivalent) method using `params.require(:post).permit(:title, :body, ...)`
+- A service object call pattern: `result = Posts::CreateService.new(author: current_user, params: post_params).call` with `result.success?` branching
+- A `rescue_from` block or concern that maps exceptions to JSON error responses with appropriate HTTP status codes

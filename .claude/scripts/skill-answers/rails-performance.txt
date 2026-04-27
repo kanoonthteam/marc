@@ -1,0 +1,23 @@
+# Answer Guidelines: rails-performance
+
+## Must Cover
+- Fix N+1 queries using `includes` (or `preload`/`eager_load`) for all 10 associated models, with nested association syntax like `Post.includes(:author, :comments, tags: :category)`
+- Explain the difference between `preload` (separate queries), `eager_load` (LEFT OUTER JOIN), and `includes` (Rails decides) and when to use each
+- Enable `strict_loading` in development (`config.active_record.strict_loading_by_default = true`) or per-association to catch N+1 queries early
+- Implement Russian doll caching with nested `cache` blocks and `touch: true` on `belongs_to` associations for automatic cache invalidation
+- Use `find_each` or `in_batches` for batch processing instead of `Post.all.each` to avoid loading all records into memory
+- Set up background job processing using Solid Queue (Rails 8 default) or Sidekiq with `retry_on`, `discard_on`, and idempotent job design
+- Add database indexes for foreign keys and columns used in WHERE/ORDER BY clauses, including composite indexes and partial indexes for PostgreSQL
+- Use `Rails.cache.fetch` with `expires_in` for low-level caching of expensive computations
+
+## Must NOT Do
+- Must NOT use `Post.all.each` to iterate over large datasets (use `find_each` or `in_batches` instead)
+- Must NOT use `after_save` for external API calls or job enqueueing (use `after_commit` which runs outside the transaction)
+- Must NOT write cache entries without an expiration time (`expires_in`)
+- Must NOT skip profiling and jump straight to optimization (recommend rack-mini-profiler or Bullet gem first)
+
+## Code Examples Must Include
+- An `includes` call with multiple and/or nested associations (e.g., `Post.includes(:author, comments: :author)`)
+- A Russian doll caching template with nested `<% cache post do %>` blocks and a model with `belongs_to :post, touch: true`
+- A background job class inheriting from `ApplicationJob` with `queue_as`, `retry_on`, and `discard_on` declarations
+- A `Rails.cache.fetch("key", expires_in: 1.hour) { expensive_operation }` pattern

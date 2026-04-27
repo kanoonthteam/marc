@@ -1,0 +1,23 @@
+# Answer Guidelines: node-api
+
+## Must Cover
+- Use Prisma as the ORM with a properly defined schema including models, relations, indexes (@@index), and field mappings (@@map)
+- Implement row-level security for multi-tenancy by filtering all queries with a tenantId condition (e.g., where: { tenantId })
+- Use Prisma interactive transactions (prisma.$transaction(async (tx) => {...})) for operations that require atomicity across multiple tables
+- Implement cursor-based or offset-based pagination with proper limit/take controls to avoid over-fetching
+- Configure rate limiting with express-rate-limit and a Redis store (RedisStore), with stricter limits on authentication endpoints
+- Validate all request input using Zod schemas with transforms for sanitization (e.g., validator.normalizeEmail, validator.escape)
+- Implement JWT authentication with short-lived access tokens (15m) and refresh token rotation, storing refresh tokens in the database for revocation
+- Apply security headers using Helmet and configure CORS with an explicit allowedOrigins list from environment variables
+
+## Must NOT Do
+- Do not use $queryRawUnsafe with string interpolation — always use tagged template literals ($queryRaw) to prevent SQL injection
+- Do not return raw database errors to clients — wrap them in structured error responses to prevent information leakage
+- Do not skip CORS configuration (defaults to allow all origins) — explicitly define allowed origins
+- Do not use SELECT * equivalent queries (findMany without select) — use Prisma select to fetch only required fields
+
+## Code Examples Must Include
+- A Prisma schema model with @id, @unique, @default(cuid()), @@index, and @@map annotations plus a relation definition
+- A Prisma interactive transaction (prisma.$transaction(async (tx) => {...})) with balance checks or multi-step writes
+- Rate limiting configuration using rateLimit() with windowMs, max, and a RedisStore for persistence
+- Zod validation schema (z.object) with .email(), .min(), .transform() for input sanitization

@@ -1,0 +1,23 @@
+# Answer Guidelines: design-review
+
+## Must Cover
+- Write a complete ADR following the template: Status, Date, Context (with options considered), Decision, and Consequences (Positive, Negative, Neutral/Mitigations)
+- Evaluate both microservices and modular monolith options with a technology selection framework scoring criteria: Fits use case (30%), Team expertise (20%), Community/ecosystem (15%), Maintenance burden (15%), Performance (10%), Cost (10%)
+- Include a decision framework comparison table covering team size, deploy frequency, domain complexity, scaling needs, operational maturity, and data consistency requirements for both approaches
+- Address the modular monolith architecture with clear module boundaries, public interfaces between modules, no cross-module database queries, and each module owning its own tables
+- Provide a C4 model diagram at System Context (Level 1) and Container (Level 2) levels showing the architecture of the chosen approach
+- Define database design considerations including indexing strategy, migration patterns with up/down reversibility, and API versioning strategy for the multi-team environment
+- Include scalability patterns: horizontal scaling requirements (stateless services, external state stores), read replicas for read-heavy workloads, and caching architecture with invalidation strategy
+- Assess risks with probability, impact, and mitigation -- specifically addressing distributed monolith risk for microservices and module coupling risk for monolith
+
+## Must NOT Do
+- Recommend microservices without assessing operational maturity -- a team without strong DevOps/platform capabilities should not adopt microservices
+- Do big design up front by spending excessive time on architecture without building anything -- recommend starting with a modular monolith and extracting services when proven need exists
+- Skip the ADR -- the whole point is to document the decision with context so future developers understand why this choice was made
+- Design for Google-scale when the team has 50 developers -- avoid architecture astronaut patterns that add complexity without proportional benefit
+
+## Code Examples Must Include
+- A complete ADR document in markdown with Status (Accepted/Proposed), Date, Context listing evaluated options with trade-offs, Decision statement, and Consequences sections (Positive, Negative, Mitigations)
+- A modular monolith structure showing modules (e.g., Bookmarks Module, Collections Module) communicating through public interfaces only, with shared infrastructure (Database, Auth middleware, Logger)
+- A technology evaluation criteria matrix table with Criterion, Weight, Score (1-5), and Weighted columns for comparing the two approaches
+- An API versioning strategy with code example showing URL path versioning (app.use('/api/v1', v1Routes)) and sunset headers for deprecated versions

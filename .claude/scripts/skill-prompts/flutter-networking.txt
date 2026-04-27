@@ -1,0 +1,1 @@
+Implement a REST API client with Dio interceptors, token refresh, offline queue, and automatic retry with exponential backoff

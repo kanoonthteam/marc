@@ -1,0 +1,19 @@
+{
+  "agent": "dev-go",
+  "role": "dev",
+  "count": 3,
+  "model": "sonnet",
+  "skills": ["go-web", "go-concurrency", "go-testing", "go-systems", "git-workflow", "code-review-practices"],
+  "mcp": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL}"
+      }
+    }
+  },
+  "taskFilter": {
+    "tags": ["backend", "go"]
+  }
+}

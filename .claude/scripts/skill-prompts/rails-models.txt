@@ -1,0 +1,1 @@
+Create a polymorphic association for comments that can belong to posts, photos, or videos, with validations, scopes, and counter caches

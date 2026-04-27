@@ -1,0 +1,1 @@
+Configure Fly.io monitoring with Prometheus metrics, log drains to Grafana Cloud, and automated scaling policies

@@ -1,0 +1,9 @@
+{
+  "agent": "architect-agent",
+  "role": "architect",
+  "count": 1,
+  "model": "sonnet",
+  "skills": ["design-patterns", "design-review", "architecture-documentation", "security-architecture", "api-design", "api-security"],
+  "mcp": {},
+  "taskFilter": {}
+}

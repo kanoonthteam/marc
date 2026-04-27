@@ -1,0 +1,11 @@
+{
+  "agent": "dev-tooling",
+  "role": "dev",
+  "count": 1,
+  "model": "sonnet",
+  "skills": ["cli-design", "build-systems", "git-workflow", "code-review-practices"],
+  "mcp": {},
+  "taskFilter": {
+    "tags": ["cli", "tooling", "build", "watcher"]
+  }
+}

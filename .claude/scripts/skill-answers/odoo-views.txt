@@ -1,0 +1,22 @@
+# Answer Guidelines: odoo-views
+
+## Must Cover
+- Form view with `<header>` containing buttons with `invisible` conditions tied to state, and `<field name="state" widget="statusbar" statusbar_visible="..."/>`
+- Tree/list view with `decoration-info`, `decoration-success`, or `decoration-danger` attributes for visual state indicators, and `multi_edit="1"` for bulk editing
+- Dynamic visibility using `invisible` attribute on fields and buttons tied to state or conditional values (not deprecated `attrs`)
+- Inline editing on One2many lines using `<tree editable="bottom">` with `<field name="sequence" widget="handle"/>` for drag-to-reorder
+- Stat buttons or widget integration using appropriate field widgets (`many2many_tags` with `options="{'color_field': 'color'}"`, `monetary` with `currency_field`, `badge` for state)
+- Chatter section at the bottom of the form with `<div class="oe_chatter">` containing `message_follower_ids`, `activity_ids`, and `message_ids`
+- Sheet structure: `<form>` > `<header>` > `<sheet>` > `<div class="oe_title">` > `<group>` > `<notebook>` hierarchy
+- Search view with `<filter>` elements for domain-based filtering, group by options using `context="{'group_by': 'field'}"`, and `<searchpanel>` for faceted search
+
+## Must NOT Do
+- Must NOT show all action buttons in all states (every button must have an `invisible` condition restricting when it appears)
+- Must NOT put complex business logic in QWeb templates (data preprocessing belongs in the Python report controller `_get_report_values`)
+- Must NOT omit `groups` attribute on fields or buttons that should be restricted to specific security groups (e.g., `groups="base.group_multi_company"` on `company_id`)
+
+## Code Examples Must Include
+- A `<button>` element with `name`, `type="object"`, `class`, `invisible` condition, and optionally `groups` attribute for role-based visibility
+- An inline `<tree editable="bottom">` inside a One2many field with `widget="handle"` for sequence ordering
+- A `<field>` using `widget="statusbar"` with `statusbar_visible` listing the visible states
+- A form view `<header>` section with at least two buttons that are conditionally visible based on different state values

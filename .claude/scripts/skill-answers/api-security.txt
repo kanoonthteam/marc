@@ -1,0 +1,22 @@
+# Answer Guidelines: api-security
+
+## Must Cover
+- OAuth2 Bearer token authentication middleware that validates the Authorization header format ("Bearer <token>"), verifies JWT with algorithm, issuer, and audience claims, and returns RFC 7807 error responses
+- JWT best practices: short-lived access tokens (5-15 minutes), refresh token rotation (one-time use), storing refresh tokens in httpOnly cookies, and minimal claims (sub, role)
+- Rate limiting implementation with tiered limits (e.g., free vs pro), Redis-backed token bucket or sliding window strategy, and proper response headers (X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After)
+- CORS configuration with explicit origin whitelist (never wildcard with credentials), specific allowed methods and headers, exposed rate limit headers, and maxAge for preflight caching
+- RFC 7807 Problem Details error format with type URI, title, status, detail, instance, and field-level errors for validation failures (422)
+- Input validation at the API boundary using a schema validation library (e.g., Zod) with type constraints, max lengths, trimming, and whitelist of allowed fields
+- Security headers using helmet (HSTS with maxAge and preload, Content-Security-Policy, X-Content-Type-Options nosniff, Referrer-Policy)
+- Webhook security with HMAC-SHA256 request signing, timestamp validation (5-minute window), and timing-safe comparison to prevent timing attacks
+
+## Must NOT Do
+- Must NOT store JWTs in localStorage -- must recommend httpOnly cookies to prevent XSS theft
+- Must NOT use wildcard CORS origin (*) with credentials: true -- must explicitly whitelist allowed origins
+- Must NOT return different error messages for "user not found" vs "wrong password" -- must use generic "invalid credentials" to prevent user enumeration
+
+## Code Examples Must Include
+- Bearer token authentication middleware that extracts the token, verifies with jsonwebtoken (including algorithms, issuer, audience options), and returns 401 with RFC 7807 format on failure
+- Rate limiting middleware with Redis-backed limiter, tiered rate limits, X-RateLimit-* response headers, and a 429 response with Retry-After header
+- CORS configuration object with explicit origin whitelist function, specific methods/headers, exposedHeaders for rate limit headers, and credentials: true
+- Input validation middleware using Zod (or equivalent schema library) with safeParse, returning 422 with field-level error details in RFC 7807 format

@@ -1,0 +1,23 @@
+# Answer Guidelines: salesforce-lwc
+
+## Must Cover
+- Use @wire with getRecord or a custom Apex method for reactive data fetching, importing field references from @salesforce/schema
+- Implement imperative Apex calls (async/await with try/catch) for user-triggered actions like save or inline edit, not @wire
+- Include proper lifecycle management: connectedCallback() for initialization, disconnectedCallback() for cleanup of subscriptions/timers
+- Use refreshApex() after imperative Apex data modifications to sync the @wire cache
+- Handle both data and error states from @wire adapters — not just the happy path
+- Implement Lightning Message Service (LMS) or CustomEvent with bubbles:true, composed:true for cross-component communication
+- Include ShowToastEvent dispatching for user feedback on success and error scenarios
+- Use dynamic imports or memoization (Map-based caching) for performance optimization on expensive computations
+
+## Must NOT Do
+- Must NOT update @wire or @api properties inside renderedCallback() — this causes infinite render loops
+- Must NOT place complex business logic in LWC JavaScript — must delegate to an Apex service layer class
+- Must NOT use imperative Apex when @wire would auto-refresh reactively (e.g., for initial data loading tied to recordId)
+- Must NOT omit error handling on @wire adapters — must check the error property alongside data
+
+## Code Examples Must Include
+- A @wire decorator with '$recordId' reactive parameter binding (e.g., @wire(getRecord, { recordId: '$recordId', fields: FIELDS }))
+- An async handler method with try/catch that calls imperative Apex and dispatches ShowToastEvent for success/error
+- A lightning-datatable component in the HTML template with columns, data binding, and an onsave or inline edit handler
+- Field imports from @salesforce/schema (e.g., import FIELD_NAME from '@salesforce/schema/Object.Field')

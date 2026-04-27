@@ -1,0 +1,23 @@
+# Answer Guidelines: design-patterns
+
+## Must Cover
+- Design the system using CQRS with separate write model (commands: deposit, withdraw, transfer) and read model (queries: balance, transaction history, audit log) with domain events connecting them
+- Implement event sourcing with an append-only event store where current state is derived by replaying events (e.g., AccountCreated, MoneyDeposited, MoneyWithdrawn, TransferInitiated)
+- Include optimistic concurrency control in the event store using version numbers to prevent conflicting writes to the same aggregate
+- Define the aggregate (e.g., BankAccount) with a fromEvents static method that rebuilds state by applying each event, and command methods that validate invariants before emitting new events
+- Address snapshot strategy for aggregates with many events to avoid replaying entire history on every load
+- Apply the saga pattern (orchestration preferred for 4+ step flows) for multi-step operations like transfers with compensation logic (e.g., if credit fails, debit must be reversed)
+- Structure the code in layers: Presentation (routes/controllers), Business Logic (services/domain), Data Access (repositories/event store), Infrastructure (database/message queue) with each layer only depending on the layer below
+- Use dependency injection with a composition root to wire all dependencies, enabling testability with in-memory implementations
+
+## Must NOT Do
+- Store only current state without event history -- a banking system with audit trail requirements must use event sourcing to reconstruct past states
+- Create a distributed monolith by prematurely splitting into microservices without understanding the domain boundaries first
+- Use an anemic domain model where account entities are just data holders and all business logic (balance checks, overdraft rules) lives in separate service classes
+- Skip compensation/rollback logic in the saga pattern -- failed transfers must have explicit reversal steps
+
+## Code Examples Must Include
+- A DomainEvent interface with eventId, aggregateId, type, data, occurredAt, and version fields, plus concrete event types (e.g., MoneyDeposited, MoneyWithdrawn)
+- An EventStore class with append(aggregateId, events, expectedVersion) method implementing optimistic concurrency check, and getEvents(aggregateId) method
+- A BookmarkCommandHandler-style command handler that validates, persists to write store, and emits domain events; paired with a QueryHandler that reads from a denormalized read store
+- A saga orchestrator class (e.g., TransferSaga) with steps array containing execute and compensate functions, and a main execute method that runs steps sequentially with reverse-order compensation on failure

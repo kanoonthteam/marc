@@ -1,0 +1,23 @@
+# Answer Guidelines: git-workflow
+
+## Must Cover
+- Branching strategy recommendation appropriate for a 12-developer team (GitHub Flow or Git Flow), with clear rationale based on team size, release cadence, and deployment model
+- Feature branch naming conventions following the pattern type/TICKET-description (e.g., feature/PROJ-123-user-authentication, bugfix/PROJ-456-fix-login-redirect, hotfix/PROJ-789-security-patch)
+- Merge strategy specification: squash merge for feature PRs (clean single commit on main), --no-ff for release branches (preserve history), and interactive rebase to clean up commits before PR
+- PR review requirements: at least 1-2 required approving reviews, dismiss stale reviews on new pushes, require CODEOWNERS approval, required status checks (CI tests, lint, build, security scan)
+- Hotfix process: branch from main (or release tag), apply fix, create PR with expedited review, merge to main and backport to active release branches if using Git Flow
+- Release train process: either tagged releases from main (GitHub Flow/Trunk-Based) or dedicated release branches (Git Flow) with version bumping following Semantic Versioning (MAJOR.MINOR.PATCH)
+- Branch protection rules for main: require pull request reviews, require status checks to pass, enforce for admins, disallow force pushes and deletions
+- Conventional Commits format (<type>(<scope>): <description>) with defined types (feat, fix, docs, chore, refactor, test) and their SemVer mapping
+
+## Must NOT Do
+- Must NOT recommend committing directly to main -- all changes must go through pull requests with review
+- Must NOT suggest rebasing shared/public branches that other developers have based work on (the golden rule of rebasing)
+- Must NOT allow force pushing to main or shared branches -- only force push to personal feature branches
+- Must NOT recommend long-lived feature branches (more than a few days) -- keep branches short-lived to avoid merge conflicts
+
+## Code Examples Must Include
+- Branch protection configuration (GitHub Settings YAML or equivalent) showing required reviewers, required status checks (ci/tests, ci/lint, ci/build), enforce_admins, and disallow force pushes
+- CODEOWNERS file example mapping directory paths to team reviewers (e.g., /src/api/ to @myorg/backend-team, /src/auth/ to @myorg/security-team)
+- Feature branch lifecycle commands: create from main, make commits with conventional commit messages, rebase onto origin/main, push and create PR with gh pr create
+- Hotfix branch workflow: checkout from main/tag, commit fix, create expedited PR, and merge back to main

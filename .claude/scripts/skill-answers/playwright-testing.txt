@@ -1,0 +1,23 @@
+# Answer Guidelines: playwright-testing
+
+## Must Cover
+- Page Object Model (POM) with BasePage abstract class and page-specific classes (e.g., CheckoutPage, PaymentPage) encapsulating locators and interaction methods
+- Component Page Objects for reusable UI elements (NavbarComponent, CartComponent) composed into page classes
+- Custom fixtures using base.extend<Fixtures>() to provide page objects and authenticated state to tests
+- Authentication setup using storageState: save signed-in state to JSON file in auth.setup.ts, reuse across projects via dependencies
+- Locator best practices: prefer getByRole, getByLabel, getByPlaceholder, getByText over CSS selectors; use getByTestId only as fallback
+- Auto-waiting and web-first assertions: Playwright auto-waits for elements to be visible/enabled/stable; use expect(locator).toHaveText() which retries until true
+- Cross-browser configuration with projects array: Desktop Chrome, Desktop Firefox, Desktop Safari, and mobile devices (Pixel 7, iPhone 14)
+- CI integration with GitHub Actions: install Playwright browsers with --with-deps, upload playwright-report as artifact, configure webServer to start app
+
+## Must NOT Do
+- Must NOT use page.waitForTimeout() (hardcoded sleeps) — rely on Playwright auto-waiting, waitForResponse, or web-first assertions
+- Must NOT use CSS class selectors (.btn-primary) or ID selectors (#submit) — these are brittle and implementation-coupled
+- Must NOT share mutable state between tests — each test must be independent with its own data setup via API calls
+- Must NOT over-mock in E2E tests — the purpose is testing the real system; only mock external payment gateways
+
+## Code Examples Must Include
+- Page Object class for a checkout step: constructor with page parameter, Locator fields defined via getByRole/getByLabel, methods like fillShippingAddress() and submitPayment()
+- Custom fixture extending base test: test = base.extend<Fixtures>({ checkoutPage, authenticatedPage }) with async setup providing pre-authenticated state
+- Multi-step checkout test using POM: navigate to cart, proceed to shipping, fill payment, confirm order, assert confirmation page with expect(page).toHaveURL and expect(locator).toBeVisible
+- playwright.config.ts with webServer configuration, multiple browser projects, trace: 'on-first-retry', screenshot: 'only-on-failure', and retries for CI

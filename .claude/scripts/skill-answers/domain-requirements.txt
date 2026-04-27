@@ -1,0 +1,23 @@
+# Answer Guidelines: domain-requirements
+
+## Must Cover
+- Start with a scope analysis document defining In Scope, Out of Scope, Assumptions, Risks (with likelihood/impact/mitigation table), Dependencies, and Success Metrics for the subscription billing feature
+- Write BDD acceptance criteria using Gherkin Given/When/Then format for each scenario: trial start, trial expiration, upgrade, downgrade, cancellation, and reactivation
+- Cover both happy path and error/edge cases in BDD scenarios (e.g., "Given a cancelled subscription, When the user tries to upgrade, Then..."; "Given a trial period, When the user upgrades before trial ends, Then...")
+- Define a walking skeleton (MVP) that identifies the minimal end-to-end slice of billing functionality to prove the architecture works
+- Include a requirements traceability matrix mapping each requirement (REQ-ID) to task IDs and test file locations
+- Specify non-functional requirements (NFRs) for the billing system covering Performance (p95 response time), Security (PCI compliance, token handling), and Reliability (zero data loss on payment processing)
+- Identify state transitions for subscriptions (trial -> active, active -> cancelled, active -> upgraded, active -> downgraded) with clear preconditions and postconditions in each scenario
+- Perform impact analysis showing affected components, data model changes, and API surface changes when adding features like proration or dunning
+
+## Must NOT Do
+- Write ambiguous acceptance criteria like "billing works correctly" or "subscription handling is proper" without specific values, status codes, and field names
+- Skip the Out of Scope section, allowing scope creep into areas like tax calculation, invoicing, or refund automation unless explicitly requested
+- Treat non-functional requirements as an afterthought -- billing systems need explicit latency, security, and data integrity requirements upfront
+- Deliver the entire feature without a walking skeleton -- no big bang delivery without incremental validation
+
+## Code Examples Must Include
+- BDD Gherkin scenarios with specific Given/When/Then steps for subscription trial, upgrade, downgrade, and cancellation (e.g., "Given a user on a 'Basic' plan at $10/month, When the user upgrades to 'Pro' at $25/month, Then the subscription plan changes to 'Pro' and billing amount is $25/month")
+- A scope analysis document in markdown with In Scope, Out of Scope, Assumptions, Risks table, and Dependencies sections
+- A requirements traceability matrix table with columns: Req ID, Requirement, Task ID, Test, and Status
+- An NFR template with ID, Category, Requirement, Rationale, Measurement method, Target/Acceptable/Unacceptable thresholds

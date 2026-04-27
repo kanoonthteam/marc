@@ -1,0 +1,1 @@
+Create an Architecture Decision Record for choosing between microservices vs modular monolith for a 50-developer team

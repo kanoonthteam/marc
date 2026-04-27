@@ -1,0 +1,23 @@
+# Answer Guidelines: flyio-operations
+
+## Must Cover
+- Configure concurrency-based auto-scaling in fly.toml [http_service.concurrency] with type (requests/connections), soft_limit for scaling trigger, and hard_limit for rejection threshold
+- Expose Prometheus metrics endpoint at /metrics using prom-client, and configure [metrics] section in fly.toml with port and path so Fly.io can scrape them for built-in Grafana dashboards
+- Implement structured JSON logging that includes FLY_REGION, FLY_MACHINE_ID, FLY_APP_NAME, timestamp, and log level in every entry for effective log aggregation
+- Show machine sizing strategy: shared-cpu-1x for dev/staging, shared-cpu-2x for small production, performance VMs for CPU-intensive tasks -- with recommendation to start small and scale based on metrics
+- Configure scale-to-zero with min_machines_running = 0 and auto_stop_machines = "suspend" for dev/staging to minimize costs with per-second billing
+- Set billing alerts using fly orgs billing-alerts set --threshold to prevent unexpected charges from misconfigured auto-scaling
+- Add Fly-Region and Fly-Machine response headers via middleware for distributed request tracing across regions
+- Show framework-specific patterns: Express with trust proxy and compression, Rails with region-namespaced cache, Next.js with standalone output, FastAPI with SIGTERM handler
+
+## Must NOT Do
+- Must NOT use performance VMs ($62+/month) for dev/staging environments -- use shared-cpu-1x for non-production workloads
+- Must NOT ignore Prometheus metrics -- without metrics you are blind to performance issues; always expose and monitor key indicators
+- Must NOT use unstructured plain text logging -- use JSON structured logging with consistent fields for searchable, aggregatable logs
+- Must NOT skip setting trust proxy in Express/Rails -- without it, client IPs from Fly's proxy headers will not be read correctly
+
+## Code Examples Must Include
+- Prometheus metrics setup using prom-client with a Histogram for HTTP request duration (labeled by method, route, status) and a Gauge for active connections, plus /metrics endpoint
+- Structured JSON logger implementation with info/error/warn methods that include FLY_REGION, FLY_MACHINE_ID, timestamp, and error stack traces
+- fly.toml configuration with [http_service] auto-scaling settings (auto_stop_machines, auto_start_machines, min_machines_running, concurrency limits) and [metrics] section
+- Cost-saving fly.toml pattern showing scale-to-zero configuration (min_machines_running = 0, auto_stop_machines = "suspend") for non-production environments

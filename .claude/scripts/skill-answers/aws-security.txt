@@ -1,0 +1,23 @@
+# Answer Guidelines: aws-security
+
+## Must Cover
+- Define IAM roles per microservice using new iam.Role with specific ServicePrincipal (e.g., lambda.amazonaws.com, ecs-tasks.amazonaws.com)
+- Apply least-privilege PolicyStatements with specific actions (e.g., 's3:GetObject', 's3:PutObject') and scoped resource ARNs -- never use wildcards
+- Use permission boundaries (permissionsBoundary) to limit the maximum permissions any role can grant
+- Configure cross-service access with iam.PolicyStatement scoped to specific resource ARNs, not '*'
+- Set up service-linked roles or task roles for ECS/Lambda that grant only the permissions each service needs
+- Implement ABAC (Attribute-Based Access Control) using tag-based conditions in IAM policies for scalable access management
+- Use iam.ManagedPolicy.fromAwsManagedPolicyName for standard execution roles (e.g., AWSLambdaBasicExecutionRole)
+- Apply cross-account access patterns using AssumeRole with externalIds when services span multiple accounts
+
+## Must NOT Do
+- Use wildcard (*) in IAM policy actions or resources -- always scope to specific actions and ARN patterns
+- Embed secrets or access keys in code or environment variables -- use Secrets Manager or Parameter Store
+- Share IAM access keys across services -- each service gets its own role with unique credentials
+- Use a single monolithic IAM role for all microservices -- each service should have its own least-privilege role
+
+## Code Examples Must Include
+- new iam.Role with assumedBy: new iam.ServicePrincipal(...) for each microservice
+- new iam.PolicyStatement with specific actions array and resources array scoped to ARN patterns
+- permissionsBoundary property on iam.Role using a ManagedPolicy that restricts maximum permissions
+- role.addToPolicy() calls attaching scoped PolicyStatements rather than inline wildcard policies

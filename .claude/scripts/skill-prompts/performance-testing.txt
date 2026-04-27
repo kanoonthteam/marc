@@ -1,0 +1,1 @@
+Write k6 load test scripts for an API that validates response times under 200ms at 1000 RPS with ramping scenarios

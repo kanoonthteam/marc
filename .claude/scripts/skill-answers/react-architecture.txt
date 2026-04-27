@@ -1,0 +1,23 @@
+# Answer Guidelines: react-architecture
+
+## Must Cover
+- Server Components are the default in React 19 + Next.js 15; only add 'use client' for interactive parts
+- Data fetching should happen in Server Components (async function with direct DB/API access), not in Client Components
+- Compose Server Components as children of Client Components to keep the client bundle small
+- Use Suspense boundaries to stream independent data sections without blocking the entire page
+- Use Server Actions (marked with 'use server') for mutations, with Zod schema validation on inputs
+- Use revalidatePath or revalidateTag after mutations to refresh cached data
+- Error boundaries (app/error.tsx) must be Client Components with error and reset props
+- Structure the App Router with route groups, separate layout.tsx per section, and parallel data fetching with Promise.all
+
+## Must NOT Do
+- Mark entire pages as 'use client' when only a small interactive portion needs it
+- Fetch data in Client Components using useEffect when Server Components can do it directly
+- Pass non-serializable props (functions, classes, Date objects) from Server Components to Client Components
+- Use useEffect for data fetching in App Router instead of RSC or Server Actions
+
+## Code Examples Must Include
+- An async Server Component that fetches data directly (e.g., await db.query or fetch) without 'use client'
+- A Client Component marked with 'use client' that receives serializable props from a Server Component
+- Suspense wrapper with a fallback around an async data-loading component
+- A Server Action with 'use server' directive and Zod validation using safeParse

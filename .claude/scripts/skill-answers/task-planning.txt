@@ -1,0 +1,23 @@
+# Answer Guidelines: task-planning
+
+## Must Cover
+- Break the feature into phased tasks using the Four-Phase Model (Foundation, Business Logic, Integration, Polish)
+- Each task must include the full JSON task template with id, title, description, acceptance_criteria, tags, dependencies, status, phase, and estimated_loc fields
+- Titles must follow the "Verb + Specific Noun + Context" pattern and be under 60 characters
+- Acceptance criteria must be specific and testable (include status codes, field names, error messages) with 3-8 ACs per task using direct assertion, Given/When/Then, or negative case patterns
+- Tasks must use correct tag routing: both stack tags (e.g., ["frontend", "react"] and ["backend", "rails"]) and area tags (e.g., "api", "auth") for proper agent assignment
+- Dependencies must form a valid DAG with no circular references, and foundation tasks (data model/store) must be root nodes
+- Each task must be under 200 LOC and follow vertical slicing -- delivering a complete feature path from API to storage, not horizontal layers
+- Include error case ACs in every task, not just happy path scenarios
+
+## Must NOT Do
+- Use horizontal slicing where all models are done first, then all routes, then all tests
+- Create "god tasks" that implement an entire feature in one task (over 200 LOC or needing "and" in the title)
+- Write vague acceptance criteria like "works correctly", "handles properly", or "is fast"
+- Assign only generic tags like "backend" without specific stack tags like "rails" or "react" for routing
+
+## Code Examples Must Include
+- A complete JSON task definition with all required fields (id, title, description, acceptance_criteria, tags, dependencies, status, phase, estimated_loc) for at least 3 tasks
+- A phased task breakdown JSON structure showing phases array with tasks grouped by Foundation, Business Logic, Integration, and Polish
+- Acceptance criteria examples covering both happy path ("POST /api/v1/auth/register returns 201") and error cases ("Returns 422 when email format is invalid")
+- A dependency chain showing tasks with explicit "dependencies" arrays referencing predecessor task IDs (e.g., "dependencies": ["T001", "T002"])

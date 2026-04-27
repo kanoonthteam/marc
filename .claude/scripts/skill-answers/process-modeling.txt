@@ -1,0 +1,23 @@
+# Answer Guidelines: process-modeling
+
+## Must Cover
+- BPMN 2.0 diagram of the order fulfillment process using correct flow objects: start events, end events, user tasks (e.g., Pack Order), service tasks (e.g., Verify Stock, Process Payment), and gateways (exclusive for decisions like in-stock check, parallel for concurrent activities)
+- Pools and lanes representing organizational boundaries: at minimum separate lanes or pools for Customer, Warehouse, and Shipping — with message flows between them for handoffs
+- Returns process modeled as a subprocess or separate pool with its own flow: return request, item inspection (exclusive gateway for condition check), refund processing, and restocking
+- As-is vs to-be analysis structure: document current state pain points (manual steps, bottlenecks, handoffs) in a table with impact and frequency, then propose to-be improvements with expected metric improvements
+- Process metrics for the e-commerce flow: cycle time (order to delivery), throughput (orders/day), process efficiency ratio (value-add time / total time), and defect rate (incorrect shipments)
+- Gateway usage: exclusive gateway (XOR) for decisions like "Is item in stock?", parallel gateway (AND) for concurrent activities like "Ship Order" and "Send Confirmation", and event-based gateway for returns/cancellation events
+- Exception and error handling: intermediate error events for payment failures, timer events for shipping deadlines or return windows, and compensation/rollback flows (e.g., refund on failed shipment)
+- Value stream mapping or bottleneck analysis identifying wait times vs processing times at each step, highlighting where delays occur (e.g., picking, approval, shipping handoff)
+
+## Must NOT Do
+- Must NOT automate a bad process — must model and analyze the as-is state before designing to-be improvements (technology-first thinking anti-pattern)
+- Must NOT ignore exceptions and edge cases — must model the 20% of cases (out of stock, payment declined, return/refund) that cause 80% of effort
+- Must NOT mix levels of abstraction — strategic overview and operational task-level details should not appear in the same diagram
+- Must NOT skip stakeholder validation — models must be walked through with real scenarios involving warehouse staff, shipping, and customer service
+
+## Code Examples Must Include
+- BPMN 2.0 text-based diagram showing the order fulfillment happy path with correct notation: start event, user/service tasks, exclusive and parallel gateways, message events between pools (Customer, Warehouse, Shipping), and end events
+- Returns subprocess diagram using BPMN elements: message start event (return request received), user task (inspect item), exclusive gateway (refund vs exchange vs reject), service tasks (process refund, update inventory), and appropriate end events including error end for rejected returns
+- As-is vs to-be comparison table with columns for Current State, Future State, and Benefit — covering improvements like manual-to-automated steps, bottleneck elimination, and expected metric gains (cycle time reduction, error rate reduction, throughput increase)
+- Process metrics table or value stream map showing processing time vs wait time per step, total cycle time, and process efficiency percentage for the order fulfillment flow

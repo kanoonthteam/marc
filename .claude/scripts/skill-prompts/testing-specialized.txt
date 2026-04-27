@@ -1,0 +1,1 @@
+Design an API testing matrix for a REST API with auth, pagination, filtering, error codes, and rate limit verification

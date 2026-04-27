@@ -1,0 +1,1 @@
+Explain how to structure a test suite for a payment processing module using the testing pyramid with specific test examples

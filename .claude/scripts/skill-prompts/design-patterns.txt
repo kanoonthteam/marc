@@ -1,0 +1,1 @@
+Design a CQRS + event sourcing architecture for a banking transaction system with audit trail and event replay

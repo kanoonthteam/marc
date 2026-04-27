@@ -1,0 +1,23 @@
+# Answer Guidelines: task-estimation
+
+## Must Cover
+- Map dependencies as a Directed Acyclic Graph (DAG) and identify the critical path -- the longest chain of dependent tasks that determines minimum completion time
+- Estimate each task using T-shirt sizing (XS/S/M/L/XL) with corresponding LOC ranges and hour ranges, and flag any XL tasks for splitting
+- Apply three-point estimation (PERT) for uncertain tasks using Optimistic, Most Likely, and Pessimistic values with the formula (O + 4M + P) / 6
+- Include a risk assessment with likelihood, impact, mitigation strategy, and contingency plan for each identified risk using the risk matrix (Low/Medium/High scoring)
+- Define spike tasks for unknown technologies or integration points with timebox (1-4 hours), clear deliverable output, and follow-up task creation
+- Present a Work Breakdown Structure (WBS) following the Epic > Story > Task hierarchy with the 100% Rule (all work captured) and mutually exclusive items
+- Calculate parallel execution schedule showing which tasks can run concurrently across multiple agents based on dependency analysis
+- Include test writing time in estimates (typically 50-100% of implementation LOC)
+
+## Must NOT Do
+- Ignore the planning fallacy by providing single-point estimates without ranges or buffers for unknowns
+- Skip spike tasks for unfamiliar third-party integrations (WebSocket libraries, push notification services) and guess instead of investigating
+- Estimate tasks without listing the specific files that need to change and their approximate LOC contribution
+- Anchor on the first estimate without considering multiple perspectives or the three-point technique
+
+## Code Examples Must Include
+- A tasks.json dependency declaration with "dependencies" arrays forming a valid DAG across at least 5 tasks
+- A risk assessment JSON object with task_id, title, and risks array containing description, likelihood, impact, mitigation, and contingency fields
+- A spike task JSON template with id, title, description, acceptance_criteria, tags, timebox, and output fields (e.g., "SPIKE: Evaluate WebSocket libraries")
+- A three-point estimation calculation showing Optimistic, Most Likely, Pessimistic values with PERT estimate and standard deviation formulas applied

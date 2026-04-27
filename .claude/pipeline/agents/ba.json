@@ -1,0 +1,9 @@
+{
+  "agent": "ba-agent",
+  "role": "ba",
+  "count": 1,
+  "model": "sonnet",
+  "skills": ["domain-modeling", "domain-requirements", "requirements-elicitation", "process-modeling"],
+  "mcp": {},
+  "taskFilter": {}
+}

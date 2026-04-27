@@ -1,0 +1,1 @@
+Design Odoo form and tree views with dynamic visibility, inline editing, stat buttons, and custom widget integration

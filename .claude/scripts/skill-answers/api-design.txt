@@ -1,0 +1,23 @@
+# Answer Guidelines: api-design
+
+## Must Cover
+- RESTful URL patterns using plural nouns for resources (e.g., /api/v1/projects, /api/v1/projects/:id/tasks) with proper HTTP method mapping (GET, POST, PUT, PATCH, DELETE)
+- Pagination strategy with both offset-based (page/perPage) and cursor-based options, explaining trade-offs and when to use each (offset for dashboards, cursor for large datasets/feeds)
+- Collection response format with `data` array, `meta` object (total, page, perPage, totalPages), and `links` object (self, first, prev, next, last) for HATEOAS navigation
+- Filtering via query parameters using bracket notation for operators (e.g., ?status[in]=active,archived&priority[gte]=3) and sorting with prefix dash for descending (e.g., ?sort=-createdAt,name)
+- Error response format following RFC 7807 Problem Details with type, title, status, detail, instance, and field-level errors array
+- HTTP status codes used correctly: 201 Created with Location header for POST, 200 for GET, 204 No Content for DELETE, 422 for validation errors, 429 for rate limiting
+- API versioning using URL path versioning (e.g., /api/v1/) as the recommended approach
+- JSON field naming conventions using camelCase, with boolean prefixes (is/has/can), timestamp suffix (At), count suffix (Count), and prefixed IDs (e.g., proj_abc123)
+
+## Must NOT Do
+- Must NOT use verb-based URLs like /getProjects or /createTask -- use HTTP methods with noun resources instead
+- Must NOT recommend deeply nested URLs beyond 2 levels (e.g., /projects/:id/tasks/:id/comments/:id/reactions is too deep)
+- Must NOT mix snake_case and camelCase in the same API response -- use camelCase consistently for JSON fields
+- Must NOT return HTTP 200 for error responses -- always use appropriate 4xx/5xx status codes
+
+## Code Examples Must Include
+- A complete OpenAPI 3.1 specification snippet (or equivalent) showing at least one path with parameters, request body schema using $ref, and response schemas for success and validation error
+- Collection endpoint implementation showing pagination with meta and HATEOAS links (self, first, prev, next, last)
+- RESTful route definitions for a project management resource showing all CRUD operations plus nested task resources (max 2 levels)
+- RFC 7807 error response JSON example with type URI, title, status, detail, and errors array containing field, message, and code

@@ -1,0 +1,1 @@
+Build a Lightning Web Component for a searchable data table with inline editing, row actions, and Apex wire adapters

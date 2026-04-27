@@ -1,0 +1,22 @@
+# Answer Guidelines: azure-networking
+
+## Must Cover
+- Design a Hub-Spoke VNet topology with a hub VNet (`Microsoft.Network/virtualNetworks`) containing `AzureFirewallSubnet`, `GatewaySubnet`, and `AzureBastionSubnet`, and spoke VNets with workload-specific subnets (e.g., `AppSubnet`, `AksSubnet`, `PrivateEndpointSubnet`)
+- Configure bidirectional VNet peering using `Microsoft.Network/virtualNetworks/virtualNetworkPeerings` with `allowGatewayTransit: true` on hub-to-spoke and `useRemoteGateways: true` on spoke-to-hub
+- Deploy Azure Front Door Premium (`Microsoft.Cdn/profiles` with `sku.name: 'Premium_AzureFrontDoor'`) with a WAF policy in `Prevention` mode, including managed rule sets (`Microsoft_DefaultRuleSet` 2.1, `Microsoft_BotManagerRuleSet` 1.0) and custom rate-limiting rules
+- Configure Private Endpoints (`Microsoft.Network/privateEndpoints`) with `privateLinkServiceConnections` specifying the correct `groupIds` (e.g., `sites` for App Service, `vault` for Key Vault) and a dedicated `PrivateEndpointSubnet` with `privateEndpointNetworkPolicies: 'Disabled'`
+- Set up Private DNS Zones (`Microsoft.Network/privateDnsZones`) for each Azure service (e.g., `privatelink.azurewebsites.net`, `privatelink.vaultcore.azure.net`) with VNet links and DNS zone groups for automatic record creation
+- Define layered NSG rules (`Microsoft.Network/networkSecurityGroups`) with explicit priority ordering: allow HTTPS (priority 100), allow Azure Load Balancer (priority 110), and deny-all inbound (priority 4096)
+- Include health probe configuration on Front Door origin groups with `probePath: '/health'`, `probeProtocol: 'Https'`, and `probeIntervalInSeconds: 30`
+
+## Must NOT Do
+- Must NOT use Service Endpoints instead of Private Endpoints for highly sensitive or production data services (Private Endpoints provide full network isolation)
+- Must NOT deploy subnets without NSGs attached (every subnet must have a network security group)
+- Must NOT expose backend services with public IP addresses directly (must route through Front Door or Application Gateway)
+- Must NOT open NSG rules to `0.0.0.0/0` for management protocols like SSH/RDP (must use Azure Bastion)
+
+## Code Examples Must Include
+- A hub VNet and spoke VNet resource pair with bidirectional peering resources (`hub-to-spoke` and `spoke-to-hub`) showing `allowGatewayTransit`/`useRemoteGateways` configuration
+- An Azure Front Door profile with WAF policy resource (`Microsoft.Network/FrontDoorWebApplicationFirewallPolicies`) in Prevention mode with at least one managed rule set and one custom rate-limit rule
+- A Private Endpoint resource (`Microsoft.Network/privateEndpoints`) with `privateLinkServiceConnections` and a corresponding Private DNS Zone with `virtualNetworkLinks` and `privateDnsZoneGroups`
+- An NSG resource with at least three rules demonstrating layered security: allow HTTPS, allow load balancer, and deny-all fallback

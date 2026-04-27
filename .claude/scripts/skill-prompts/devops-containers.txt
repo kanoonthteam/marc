@@ -1,0 +1,1 @@
+Create a multi-stage Dockerfile for a Node.js app with non-root user, health checks, and Trivy vulnerability scanning

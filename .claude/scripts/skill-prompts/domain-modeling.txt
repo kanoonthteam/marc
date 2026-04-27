@@ -1,0 +1,1 @@
+Model an e-commerce marketplace domain -- identify bounded contexts, aggregates, and value objects for sellers, buyers, and orders

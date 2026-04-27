@@ -1,0 +1,23 @@
+# Answer Guidelines: gcloud-security
+
+## Must Cover
+- VPC Service Controls using service perimeters to restrict API access to authorized networks and projects
+- Access levels with conditions (IP ranges, device policy, identity) for defining trusted access contexts
+- Workload Identity Federation using google_iam_workload_identity_pool and google_iam_workload_identity_pool_provider with OIDC configuration and attribute_mapping (google.subject, attribute.repository)
+- attribute_condition on the identity pool provider to restrict which external identities can authenticate (e.g., assertion.repository_owner constraint)
+- Service account impersonation via google_service_account_iam_member with roles/iam.workloadIdentityUser and principalSet member format
+- IAM conditions using CEL expressions for temporal access (request.time), IP-based access (origin.ip), and expiring access (timestamp comparison)
+- Least-privilege service account roles using for_each with specific predefined roles (e.g., roles/run.developer, roles/artifactregistry.writer)
+- Private networking with VPC, Cloud NAT, and Private Service Connect for managed service access
+
+## Must NOT Do
+- Must NOT use service account JSON keys; must use Workload Identity Federation with OIDC tokens for CI/CD
+- Must NOT grant roles/editor or roles/owner; must use specific predefined roles like roles/run.developer or roles/cloudsql.client
+- Must NOT store secrets in environment variables or source code; must use Secret Manager with runtime mounting
+- Must NOT create public Cloud SQL instances; must use private IP with VPC peering or Private Service Connect
+
+## Code Examples Must Include
+- Terraform google_iam_workload_identity_pool and google_iam_workload_identity_pool_provider with oidc block and attribute_mapping
+- Terraform google_service_account_iam_member binding workload identity user role with principalSet member
+- Terraform google_project_iam_member with IAM condition block using CEL expression (e.g., request.time or origin.ip)
+- VPC networking resources: google_compute_network, google_compute_subnetwork with private_ip_google_access, and google_compute_router_nat for Cloud NAT

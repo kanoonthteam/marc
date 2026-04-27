@@ -1,0 +1,9 @@
+{
+  "agent": "integration-agent",
+  "role": "integration",
+  "count": 1,
+  "model": "sonnet",
+  "skills": ["playwright-testing", "testing-strategies", "testing-fundamentals", "git-workflow", "code-review-practices"],
+  "mcp": {},
+  "taskFilter": {}
+}

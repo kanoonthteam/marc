@@ -1,0 +1,23 @@
+# Answer Guidelines: architecture-documentation
+
+## Must Cover
+- Level 1 System Context diagram showing the e-commerce platform as ONE box with all users (Customer, Admin) and external systems (Payment Gateway, Email Service, Supplier API) labeled with relationship descriptions
+- Level 2 Container diagram zooming into the platform to show containers: Web App (React SPA), API Gateway (Node.js Express), Order Service, Product Service, databases (PostgreSQL), Message Queue (RabbitMQ), Cache (Redis), CDN
+- Level 3 Component diagram for at least one container (e.g., Order Service) showing internal components: Controller, Business Logic, Repository, Payment Client, Notification Publisher
+- Each diagram must label every element with name, technology, and brief description following C4 notation rules
+- ADR included for at least one key decision (e.g., database choice, messaging pattern) with Status, Context, Decision, Consequences (positive/negative/risks), and Alternatives Considered
+- Documentation targets multiple audiences: executives see Level 1, developers see Levels 2-3, and the ADR captures decision rationale for architects
+- Diagrams rendered as code using Mermaid, PlantUML, or Structurizr DSL so they are version-controlled and diffable
+- Relationships between containers labeled with protocol/technology (HTTPS, gRPC, SQL, AMQP) and what flows between them
+
+## Must NOT Do
+- Create a Level 4 code diagram for every container (Level 4 should be rare and only for critical sections since they go stale quickly)
+- Put all detail into a single diagram for all audiences instead of using the multi-level C4 approach
+- Write ADRs without an Alternatives Considered section documenting rejected options with reasons
+- Produce diagrams without labels, technology annotations, or relationship descriptions (box-and-arrow without context)
+
+## Code Examples Must Include
+- A C4 System Context diagram (Level 1) in Mermaid, PlantUML, or Structurizr DSL showing persons and external systems connected to the e-commerce platform
+- A C4 Container diagram (Level 2) showing the internal containers (Web App, API Gateway, services, databases, message queue) with technology labels and protocols on arrows
+- A C4 Component diagram (Level 3) for one container showing internal components like Controller, Service, Repository, and external clients
+- A complete ADR following the template: numbered title, Status with date, Context explaining the problem, Decision, Consequences (positive/negative/risks), and Alternatives Considered with rejection rationale

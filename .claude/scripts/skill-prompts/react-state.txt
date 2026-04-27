@@ -1,0 +1,1 @@
+Implement global state management for a shopping cart using Zustand with persistence, optimistic updates, and sync across tabs

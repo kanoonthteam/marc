@@ -1,0 +1,23 @@
+# Answer Guidelines: gcloud-operations
+
+## Must Cover
+- SLO definition using google_monitoring_slo Terraform resource with request_based_sli and goal (e.g., 0.999 for availability, 0.95 for latency)
+- Burn rate alerting using google_monitoring_alert_policy with select_slo_burn_rate filter referencing the SLO resource ID
+- Custom service definition using google_monitoring_custom_service as the parent for SLO resources
+- Availability SLO with good_total_ratio using metric.type="run.googleapis.com/request_count" and response_code_class filter
+- Latency SLO with distribution_cut using metric.type="run.googleapis.com/request_latencies" and range.max threshold
+- Log-based metrics or structured logging integration using Cloud Logging with severity levels and JSON structured fields
+- Custom metrics using Cloud Monitoring metric filters tied to cloud_run_revision resource type
+- Terraform configuration with rolling_period_days for SLO window and notification_channels for alert routing
+
+## Must NOT Do
+- Must NOT use threshold-based alerting on individual errors; must use SLO burn rate alerts to reduce noise and focus on customer impact
+- Must NOT store Terraform state locally; must use GCS backend with versioning enabled
+- Must NOT skip explicit timeout settings on Cloud Build pipelines; default 10-minute timeout can cause runaway builds
+- Must NOT ignore resource labeling for cost allocation; must tag all resources with environment, team, and cost-center labels
+
+## Code Examples Must Include
+- Terraform google_monitoring_custom_service and google_monitoring_slo with request_based_sli containing good_total_ratio or distribution_cut
+- Terraform google_monitoring_alert_policy with condition_threshold using select_slo_burn_rate filter and threshold_value
+- Terraform backend "gcs" configuration with bucket and prefix for remote state management
+- Structured logging setup using @google-cloud/logging or JSON log format with severity, trace ID, and resource metadata

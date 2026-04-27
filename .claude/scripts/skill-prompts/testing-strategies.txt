@@ -1,0 +1,1 @@
+Design a contract testing strategy using Pact for a microservices architecture with consumer-driven contracts

@@ -1,0 +1,1 @@
+Set up GitOps with ArgoCD for a microservices platform with HPA, network policies, and RBAC on EKS

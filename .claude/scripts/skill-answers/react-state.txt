@@ -1,0 +1,23 @@
+# Answer Guidelines: react-state
+
+## Must Cover
+- Use Zustand with create() for client-side state, including persist middleware for storage and devtools middleware for debugging
+- Use selectors in Zustand to prevent unnecessary re-renders (subscribe to specific slices of state)
+- Implement optimistic updates with TanStack Query useMutation: onMutate (cancel queries, snapshot previous, set optimistic data), onError (rollback to previous), onSettled (invalidateQueries)
+- Use persist middleware from zustand/middleware with a storage name key for cross-tab/session persistence
+- Separate server state (TanStack Query) from client state (Zustand) -- do not store server-fetched data in Zustand
+- Use staleTime in TanStack Query to avoid unnecessary refetches
+- Invalidate queries after mutations using queryClient.invalidateQueries to keep data fresh
+- Cancel in-flight queries before optimistic updates with queryClient.cancelQueries to prevent race conditions
+
+## Must NOT Do
+- Store server-fetched data (e.g., cart items from API) in Zustand instead of TanStack Query
+- Use useEffect + useState for data fetching instead of TanStack Query or RSC
+- Use React Context for frequently changing state like cart quantities (causes re-render cascades)
+- Skip error rollback in optimistic updates (must restore previous data on mutation failure)
+
+## Code Examples Must Include
+- A Zustand store using create() with persist middleware wrapping the state definition, including a storage name
+- An optimistic update pattern with useMutation showing onMutate (cancelQueries + setQueryData), onError (rollback), and onSettled (invalidateQueries)
+- Zustand selectors used in components to subscribe to specific state slices (e.g., useCartStore(state => state.items))
+- TanStack Query useQuery or useInfiniteQuery with a queryKey and staleTime configuration

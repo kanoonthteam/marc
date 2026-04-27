@@ -1,0 +1,1 @@
+Design a Cosmos DB solution with partition strategy, consistency levels, and change feed processing for event-driven architecture

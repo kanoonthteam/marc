@@ -1,0 +1,23 @@
+# Answer Guidelines: azure-data
+
+## Must Cover
+- Define a Cosmos DB account using `Microsoft.DocumentDB/databaseAccounts` with multi-region write enabled (`enableMultipleWriteLocations: true`) and automatic failover (`enableAutomaticFailover: true`) across at least two locations with zone redundancy
+- Design a partition strategy using hierarchical partition keys with `partitionKey.kind: 'MultiHash'` and `version: 2`, specifying multiple paths (e.g., `/tenantId`, `/customerId`, `/orderDate`) that align with primary query patterns
+- Configure an explicit indexing policy on the Cosmos DB container with `includedPaths`, `excludedPaths`, and `compositeIndexes` instead of relying on the default index-everything policy
+- Set consistency level to an appropriate level (e.g., `Session` for most workloads) with explicit `consistencyPolicy` configuration including `maxIntervalInSeconds` and `maxStalenessPrefix`
+- Enable autoscale throughput on the container with `options.autoscaleSettings.maxThroughput` instead of manual RU provisioning
+- Implement Change Feed processing using an Azure Function with `CosmosDBTrigger` binding that includes `LeaseContainerName`, `MaxItemsPerInvocation`, and `FeedPollDelay` configuration for event-driven architecture
+- Enable continuous backup with `backupPolicy.type: 'Continuous'` for point-in-time restore capability
+- Disable public network access (`publicNetworkAccess: 'Disabled'`) and use private endpoints or `networkAclBypass: 'AzureServices'` for network isolation
+
+## Must NOT Do
+- Must NOT use Cosmos DB without an explicit indexing policy (default indexes everything, wasting RUs)
+- Must NOT design partition keys that lead to cross-partition queries as the primary access pattern (partition key must align with query patterns)
+- Must NOT use single-region Cosmos DB for production (must enable multi-region with automatic failover)
+- Must NOT store connection strings in application settings (must use Managed Identity with `DefaultAzureCredential`)
+
+## Code Examples Must Include
+- A Cosmos DB account resource (`Microsoft.DocumentDB/databaseAccounts`) with `enableMultipleWriteLocations: true`, multiple `locations`, and `publicNetworkAccess: 'Disabled'`
+- A Cosmos DB container resource with `partitionKey` using `kind: 'MultiHash'` and `version: 2` with multiple paths, plus an explicit `indexingPolicy` with `includedPaths`, `excludedPaths`, and `compositeIndexes`
+- A Change Feed processor Azure Function using the `CosmosDBTrigger` attribute with `databaseName`, `containerName`, `LeaseContainerName`, and `MaxItemsPerInvocation` parameters
+- Autoscale throughput configuration with `autoscaleSettings.maxThroughput` on the container options

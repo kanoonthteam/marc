@@ -1,0 +1,23 @@
+# Answer Guidelines: terraform-patterns
+
+## Must Cover
+- Composable module structure with separate `main.tf`, `variables.tf`, `outputs.tf`, and `versions.tf` files per module
+- Remote state backend using S3 with encryption, DynamoDB locking table, versioning, and public access block
+- Terragrunt for multi-account AWS with root `terragrunt.hcl` generating backend and provider configs, `_envcommon/` shared configs, and per-environment directories (dev/staging/production)
+- Variable validation blocks with `condition` and `error_message` for input enforcement
+- Workspace isolation: separate state per environment, never share state between dev, staging, and production
+- CI/CD integration with GitHub Actions: `terraform plan` on PR (with plan output as PR comment), `terraform apply` on merge to main with OIDC authentication (`id-token: write`)
+- Module versioning using `version = "~> 5.0"` constraints for registry modules and `?ref=v2.1.0` for Git-sourced modules
+- `prevent_destroy` lifecycle rule on critical stateful resources (databases, S3 buckets)
+
+## Must NOT Do
+- Use local state in production; must always use remote backends with locking
+- Hardcode values; must use variables, locals, and `default_tags` in the provider block
+- Run `terraform apply -auto-approve` in production without prior plan review
+- Use `count` for conditional resources instead of `for_each` which provides better state management
+
+## Code Examples Must Include
+- An S3 backend configuration with `bucket`, `key`, `region`, `encrypt`, `dynamodb_table`, and `kms_key_id`
+- A Terragrunt root `terragrunt.hcl` with `remote_state` block using `path_relative_to_include()` and `generate "provider"` block with `default_tags`
+- A reusable module definition with typed `variable` blocks (including `object` type), `output` blocks with descriptions, and `versions.tf` with `required_version` and `required_providers`
+- A GitHub Actions workflow with separate `plan` (on pull_request) and `apply` (on push to main) jobs using `aws-actions/configure-aws-credentials@v4` with OIDC role assumption

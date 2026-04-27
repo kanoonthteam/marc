@@ -1,0 +1,23 @@
+# Answer Guidelines: salesforce-apex
+
+## Must Cover
+- Use the fflib Domain layer (extending fflib_SObjectDomain) with a one-trigger-per-object pattern that delegates to fflib_SObjectDomain.triggerHandler()
+- Implement bulkified logic that collects records into collections first, then performs SOQL/DML outside of loops using Maps for O(1) lookups
+- Use fflib_ISObjectUnitOfWork (UoW) to register and commit DML operations for child record creation instead of scattered DML statements
+- Include governor limit awareness: collect IDs into Sets, query in bulk with WHERE Id IN :idSet, and use aggregate SOQL (COUNT, SUM) where applicable
+- Implement the fflib Selector layer (extending fflib_SObjectSelector) with getSObjectFieldList() and newQueryFactory() for all SOQL queries
+- Use @future(callout=true) or Queueable with Database.AllowsCallouts for the external API callout, since callouts cannot be made from trigger context
+- Include proper error handling with Database.SaveResult for partial success on bulk DML operations
+- Use WITH USER_MODE or WITH SECURITY_ENFORCED in SOQL queries to enforce field-level security
+
+## Must NOT Do
+- Must NOT place SOQL or DML statements inside for loops (governor limit violation)
+- Must NOT put business logic directly in the trigger file itself — must delegate to Domain or Service layer classes
+- Must NOT hardcode endpoint URLs or credentials — must use Named Credentials (callout:Named_Credential) or Custom Metadata
+- Must NOT use single-record processing patterns that would fail when Trigger.new contains 200+ records
+
+## Code Examples Must Include
+- A trigger file with fflib_SObjectDomain.triggerHandler(DomainClass.class) and all trigger events registered (before insert, after insert, before update, after update)
+- A Domain class extending fflib_SObjectDomain with override methods such as onBeforeInsert(), onAfterInsert(), or onValidate() containing bulkified record iteration
+- An fflib_ISObjectUnitOfWork instantiation with registerNew() or registerDirty() calls followed by uow.commitWork() for child record creation
+- A @future(callout=true) or Queueable class implementing Database.AllowsCallouts with HttpRequest using callout:Named_Credential endpoint

@@ -1,0 +1,23 @@
+# Answer Guidelines: flutter-ui
+
+## Must Cover
+- Use AppColors static constants for all colors; never hardcode hex color values in widgets
+- Use ConsumerStatefulWidget with WidgetsBindingObserver for screens that fetch data, re-fetching on AppLifecycleState.resumed
+- Handle all four UI states explicitly in every list screen: loading (CircularProgressIndicator), error (ErrorDisplay with onRetry), empty (EmptyState), and data (ListView.builder with RefreshIndicator)
+- Use GoogleFonts.notoSansThai for all text styles to maintain consistent Thai typography
+- Use showModalBottomSheet for confirmations (not AlertDialog), with SafeArea, rounded top corners, and Navigator.pop returning a bool result
+- Check mounted after every async gap before using context or calling setState
+- Use WidgetsBinding.instance.addPostFrameCallback in initState for initial data fetching
+- Use context.l10n extension for all user-facing strings; never hardcode text in widgets
+
+## Must NOT Do
+- Must NOT hardcode hex color values in widgets instead of using AppColors constants
+- Must NOT use AlertDialog for confirmations (ironmove-app uses showModalBottomSheet)
+- Must NOT skip handling loading, error, or empty states (only showing the data state)
+- Must NOT use context after async gaps without checking mounted first
+
+## Code Examples Must Include
+- A screen using ConsumerStatefulWidget with WidgetsBindingObserver that adds/removes observer in initState/dispose and refreshes data in didChangeAppLifecycleState
+- State handling pattern showing the conditional chain: isLoading ? CircularProgressIndicator : error != null ? ErrorDisplay : items.isEmpty ? EmptyState : RefreshIndicator with ListView.builder
+- A PrimaryButton usage with label, onPressed, isLoading, and type (PrimaryButtonType.filled or PrimaryButtonType.outlined)
+- A showModalBottomSheet confirmation pattern with StatefulBuilder for local loading state, returning bool via Navigator.pop

@@ -1,0 +1,23 @@
+# Answer Guidelines: testing-specialized
+
+## Must Cover
+- Endpoint test matrix format: table with test case, expected status code, expected body, result columns for each REST endpoint (POST, GET, PUT, PATCH, DELETE)
+- Authentication flow testing: reject missing token (401), reject expired token (401), reject malformed token (401), reject wrong signature (401), BOLA prevention (404 not 403)
+- Pagination boundary testing: default perPage, partial last page, page beyond total returns empty, perPage=1, cap perPage at maximum (100), reject perPage=0 and negative page
+- Rate limiting verification: send burst of requests and assert some return 429 status
+- Security headers verification: X-Content-Type-Options nosniff, X-Frame-Options, Strict-Transport-Security, no X-Powered-By exposure
+- CORS testing: allow configured origins, reject unknown origins with no access-control-allow-origin header
+- Resource consumption limits: reject oversized request body (413), limit pagination size, rate limit repeated requests
+- Concurrent request testing: handle N concurrent creates without errors, handle concurrent updates to same resource with last-write-wins or optimistic locking (409)
+
+## Must NOT Do
+- Must NOT skip auth testing because "it's handled by middleware" — test auth flows at the API level with explicit token scenarios
+- Must NOT test only happy paths in the endpoint matrix — must include validation errors, missing fields, invalid formats, and edge cases
+- Must NOT leak existence of resources via 403 — use 404 for BOLA prevention so unauthorized users cannot enumerate resources
+- Must NOT omit test data isolation — each test suite must use fresh state (InMemoryStore or beforeEach reset)
+
+## Code Examples Must Include
+- REST CRUD test matrix in markdown table format covering all HTTP methods for a resource with auth, test cases, and expected status columns
+- Authentication test using supertest: request(app).get('/api/v1/protected').set('Authorization', 'Bearer ${token}') with expect for 401/403/200 status codes
+- Pagination test: seed exact count, request with page/perPage params, assert data length, meta.total, and meta.totalPages
+- OWASP BOLA test: create resource as user A, attempt access as user B, expect 404 status

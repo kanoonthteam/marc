@@ -1,0 +1,1 @@
+Create an accessibility testing checklist for a banking web app covering WCAG 2.1 AA with axe-core automation

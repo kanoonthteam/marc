@@ -1,0 +1,1 @@
+Set up Azure Monitor with Application Insights, Log Analytics workspaces, and automated alert rules with Action Groups

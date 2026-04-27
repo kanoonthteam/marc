@@ -1,0 +1,9 @@
+{
+  "agent": "qa-agent",
+  "role": "qa",
+  "count": 1,
+  "model": "sonnet",
+  "skills": ["testing-verification", "testing-specialized", "testing-fundamentals", "testing-strategies", "playwright-testing", "performance-testing", "accessibility-testing", "chaos-engineering"],
+  "mcp": {},
+  "taskFilter": {}
+}

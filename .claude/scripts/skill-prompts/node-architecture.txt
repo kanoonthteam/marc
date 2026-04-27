@@ -1,0 +1,1 @@
+Design a modular Express.js application with dependency injection, domain-driven structure, and graceful shutdown handling

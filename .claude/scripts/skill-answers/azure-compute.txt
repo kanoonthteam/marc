@@ -1,0 +1,23 @@
+# Answer Guidelines: azure-compute
+
+## Must Cover
+- Define an AKS cluster using `Microsoft.ContainerService/managedClusters` (or `azurerm_kubernetes_cluster` in Terraform) with separate system and user node pools, where the system pool has `nodeTaints: ['CriticalAddonsOnly=true:NoSchedule']` and the user pool has `enableAutoScaling: true` with `minCount`/`maxCount` bounds
+- Enable Workload Identity on AKS via `securityProfile.workloadIdentity.enabled: true` instead of storing credentials in pods or config maps
+- Configure Azure CNI networking with network policy enabled (`networkPlugin: 'azure'`, `networkPolicy: 'azure'`) including explicit `serviceCidr` and `dnsServiceIP` values
+- Include autoscaling configuration on node pools with `enableAutoScaling: true` and properly bounded `minCount`/`maxCount` values (not over-provisioned)
+- Enable Container Insights and Azure Monitor via `azureMonitorProfile` with `containerInsights.enabled: true` linked to a Log Analytics workspace
+- Define a Kubernetes `ServiceAccount` with `azure.workload.identity/client-id` annotation and a `Deployment` with the label `azure.workload.identity/use: "true"` to demonstrate workload identity in pod manifests
+- Enable KEDA for event-driven autoscaling with a `ScaledObject` (kind: `keda.sh/v1alpha1/ScaledObject`) targeting the deployment with specific trigger configuration (e.g., `azure-servicebus` queue with `messageCount`)
+- Use `UserAssigned` managed identity on the AKS cluster resource with `identity.type: 'UserAssigned'` and `identity_ids` referencing a pre-created identity
+
+## Must NOT Do
+- Must NOT deploy AKS without network policies enabled (no bare `networkPlugin` without `networkPolicy`)
+- Must NOT store credentials or connection strings directly in pod specs or config maps (must use Workload Identity or Key Vault CSI driver)
+- Must NOT use a single node pool for both system and user workloads (must separate system pool with taints from worker pools)
+- Must NOT skip health probes or readiness checks on deployed containers
+
+## Code Examples Must Include
+- An AKS cluster resource (Bicep `Microsoft.ContainerService/managedClusters` or Terraform `azurerm_kubernetes_cluster`) with at least two `agentPoolProfiles`/node pools: one `System` mode and one `User` mode, both with `enableAutoScaling: true`
+- A Kubernetes manifest showing a `ServiceAccount` with `azure.workload.identity/client-id` annotation and a `Deployment` with `azure.workload.identity/use: "true"` label on the pod template
+- A KEDA `ScaledObject` resource with `scaleTargetRef`, `minReplicaCount`, `maxReplicaCount`, and at least one trigger (e.g., `azure-servicebus`)
+- Network configuration block with `networkPlugin: 'azure'` and `networkPolicy: 'azure'` (or equivalent Terraform `network_profile` block)

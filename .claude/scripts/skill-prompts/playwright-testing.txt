@@ -1,0 +1,1 @@
+Set up Playwright E2E tests with Page Object Model for a multi-step checkout flow including payment integration

@@ -1,0 +1,23 @@
+# Answer Guidelines: aws-compute
+
+## Must Cover
+- Define a FargateTaskDefinition with CPU/memory configuration and ARM64 runtimePlatform (Graviton2) for cost-performance optimization
+- Create a FargateService with circuitBreaker enabled ({ rollback: true }) to auto-rollback failed deployments
+- Configure autoScaleTaskCount with scaleOnCpuUtilization and/or scaleOnMemoryUtilization target tracking policies
+- Set up an ApplicationLoadBalancer with an HTTPS listener and health check configuration (path, interval, healthyThresholdCount, unhealthyThresholdCount)
+- Define container health checks using CMD-SHELL with startPeriod, interval, timeout, and retries
+- Use capacityProviderStrategies with FARGATE (on-demand base for prod) instead of specifying launch type directly
+- Configure blue-green or rolling deployment strategy using ECS deployment configuration or CodeDeploy
+- Place service in PRIVATE_WITH_EGRESS subnets and restrict security group ingress to ALB only
+
+## Must NOT Do
+- Use FARGATE_SPOT for production baseline capacity -- always set on-demand base capacity for prod
+- Skip health checks on either the container or the ALB target group
+- Hardcode a single instance type without considering capacity provider strategies
+- Omit auto-scaling configuration entirely -- always define scaling policies even if conservative
+
+## Code Examples Must Include
+- new ecs.FargateService with capacityProviderStrategies array specifying FARGATE and FARGATE_SPOT with weight/base
+- scaling.scaleOnCpuUtilization or scaling.scaleOnMemoryUtilization with targetUtilizationPercent
+- listener.addTargets with healthCheck object containing path, interval, and threshold counts
+- circuitBreaker: { rollback: true } in the FargateService configuration

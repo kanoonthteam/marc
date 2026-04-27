@@ -1,0 +1,1 @@
+Optimize a dashboard page that loads 10 associated models with N+1 queries, add Russian doll caching and background job processing

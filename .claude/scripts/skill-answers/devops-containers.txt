@@ -1,0 +1,23 @@
+# Answer Guidelines: devops-containers
+
+## Must Cover
+- Multi-stage Dockerfile with at least three stages: deps (install dependencies), builder (build application), and runtime (production image)
+- Non-root user creation using `groupadd`/`useradd` with `USER app` directive in the runtime stage
+- HEALTHCHECK instruction with `--interval`, `--timeout`, `--start-period`, and `--retries` flags
+- Trivy vulnerability scanning integrated into CI with `aquasecurity/trivy-action` and SARIF output for GitHub code scanning
+- Base image selection using `node:22-slim` for production (not full `node:22` or `latest`)
+- Layer ordering optimization: system deps -> package manager files (package.json, pnpm-lock.yaml) -> `pnpm install --frozen-lockfile` -> application code -> build
+- `.dockerignore` file to exclude node_modules, .git, .env, tests, and IDE files from build context
+- BuildKit secret mounts with `--mount=type=secret` to avoid baking secrets into image layers
+
+## Must NOT Do
+- Run containers as root in production
+- Use `ADD` when `COPY` suffices (ADD has tar extraction and URL fetching side effects)
+- Store secrets in image layers; must use runtime secrets or `--mount=type=secret`
+- Install dev dependencies in the production image; must use `pnpm prune --prod` or `--frozen-lockfile` with production-only install
+
+## Code Examples Must Include
+- A complete multi-stage Dockerfile with `FROM node:22-slim AS deps`, `FROM node:22-slim AS builder`, and `FROM node:22-slim AS runtime` stages, using `COPY --from=` and `--chown=app:app`
+- A HEALTHCHECK instruction using either `curl` or `node -e "fetch(...)"`
+- A Trivy GitHub Actions step using `aquasecurity/trivy-action@0.28.0` with `severity: 'CRITICAL,HIGH'` and SARIF upload
+- A health check endpoint implementation returning status, version, uptime, and dependency checks (database, redis)

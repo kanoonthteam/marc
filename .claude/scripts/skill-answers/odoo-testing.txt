@@ -1,0 +1,20 @@
+# Answer Guidelines: odoo-testing
+
+## Must Cover
+- `TransactionCase` subclass with `setUpClass(cls)` using `super().setUpClass()` for shared test data creation, and per-test record creation in `setUp(self)`
+- Test methods covering model logic: record creation assertions, computed field calculations, constraint validation with `self.assertRaises(ValidationError)`, and state transition testing (both valid and invalid)
+- `HttpCase` subclass with `@tagged('post_install', '-at_install')` decorator for browser tour/controller integration tests, using `self.start_tour()` method
+- Access rights testing using `with_user(user)` to switch user context, creating test users with specific `groups_id`, and asserting that restricted operations raise exceptions
+- `Form` class from `odoo.tests.common` for UI simulation: testing onchange behavior, required field validation, One2many line manipulation via `form.line_ids.new()`, and `.save()` to persist
+- Test categories using `@tagged` decorator to organize tests (e.g., `'post_install'`, `'-at_install'`) for selective test execution
+
+## Must NOT Do
+- Must NOT create test data in every test method individually; shared data must go in `setUpClass` to avoid redundancy and improve performance
+- Must NOT test onchange methods by calling them directly; the `Form` class must be used to simulate UI interaction and trigger onchanges naturally
+- Must NOT write tour tests (`HttpCase`) without the `@tagged('post_install', '-at_install')` decorator (tours require the module to be fully installed)
+
+## Code Examples Must Include
+- A `TransactionCase` test class with `setUpClass` creating shared records via `cls.env['model'].create(...)` and a test method using `self.assertRaises(UserError)` for invalid state transitions
+- A `Form` class usage block: `with Form(self.env['model']) as form:` setting field values, adding One2many lines with `form.line_ids.new()`, and calling `form.save()`
+- An access rights test creating a user with `cls.env['res.users'].create({..., 'groups_id': [(6, 0, [group_ref.id])]})` and testing with `record.with_user(user).unlink()` inside `assertRaises`
+- An `HttpCase` subclass with `@tagged('post_install', '-at_install')` and a test method calling `self.start_tour("/web", 'tour_name', login='admin')`

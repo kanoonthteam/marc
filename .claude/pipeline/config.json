@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "name": "claude-squad",
+  "description": "Full-stack development team pipeline",
+  "taskBoard": "tasks.json",
+  "planning": {
+    "flow": ["pm", "ba", "designer", "architect"],
+    "loop": true,
+    "maxIterations": 3,
+    "requireUserApproval": true
+  },
+  "implementation": {
+    "parallel": true,
+    "maxConcurrent": 3
+  },
+  "integration": {
+    "runAfterEachPhase": true,
+    "agent": "integration"
+  },
+  "verification": {
+    "runAfterEachPhase": true,
+    "blockOnFailure": true
+  },
+  "defaults": {
+    "model": "sonnet",
+    "maxTurns": 50
+  },
+  "fizzy": {
+    "url": "https://your-fizzy.fly.dev",
+    "accountSlug": "your-account",
+    "token": "${FIZZY_TOKEN}",
+    "sync": false,
+    "boardId": ""
+  }
+}

@@ -1,0 +1,1 @@
+Write RSpec request specs for a payments API endpoint with authentication, validation errors, and Stripe webhook handling

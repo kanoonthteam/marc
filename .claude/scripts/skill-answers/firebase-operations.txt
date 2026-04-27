@@ -1,0 +1,23 @@
+# Answer Guidelines: firebase-operations
+
+## Must Cover
+- Configure Firebase Emulator Suite in firebase.json with ports for auth (9099), functions (5001), firestore (8080), hosting (5000), storage (9199), and UI (4000)
+- Use --import and --export-on-exit flags with firebase emulators:start to persist seed data between development sessions
+- Show CI/CD pipeline with GitHub Actions using firebase emulators:exec to run tests against emulators (firebase emulators:exec --only firestore,auth "npm test")
+- Define composite indexes in firestore.indexes.json for queries with multiple where clauses, and deploy with firebase deploy --only firestore:indexes
+- Show cost optimization strategies: aggregation queries (getCountFromServer, getAggregateFromServer), Firestore bundles served from CDN, filtered real-time listeners with where() and limit()
+- Demonstrate seed data script using firebase-admin SDK with FIRESTORE_EMULATOR_HOST and FIREBASE_AUTH_EMULATOR_HOST environment variables pointing to 127.0.0.1
+- Cover v8 to modular SDK migration path including the compat layer (firebase/compat/app) for gradual migration
+- Include deployment commands: firebase deploy --only functions, firebase deploy --only firestore:rules, and firebase deploy --only functions:functionName for targeted deploys
+
+## Must NOT Do
+- Must NOT develop or test against production Firestore -- always use the Emulator Suite for local development
+- Must NOT deploy rules manually without automated testing -- always test rules with emulators in CI before deploying
+- Must NOT commit large emulator data exports to git -- use deterministic seed scripts instead
+- Must NOT skip composite index deployment -- Firestore queries with multiple filters fail without proper indexes in firestore.indexes.json
+
+## Code Examples Must Include
+- firebase.json emulators configuration block with port assignments for at least auth, firestore, and functions
+- GitHub Actions workflow YAML that installs firebase-tools and runs firebase emulators:exec with --only flag to test against emulators
+- Seed data script (TypeScript) that sets FIRESTORE_EMULATOR_HOST, creates test users with auth.createUser and setCustomUserClaims, and seeds Firestore collections using batch writes
+- firestore.indexes.json with at least one composite index specifying collectionGroup, queryScope, and multiple fields with order directions

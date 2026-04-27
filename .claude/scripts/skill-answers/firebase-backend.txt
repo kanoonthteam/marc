@@ -1,0 +1,23 @@
+# Answer Guidelines: firebase-backend
+
+## Must Cover
+- Use Firebase v11 modular SDK with tree-shakable imports (e.g., import { collection, query, where, getDocs } from 'firebase/firestore') instead of namespaced imports
+- Implement singleton pattern for Firebase initialization using getApps() check to prevent multiple app instances
+- Show Firestore denormalization pattern with a Cloud Function (onDocumentUpdated) to propagate changes to denormalized fields
+- Use Cloud Functions Gen 2 (firebase-functions/v2) with concurrency setting to handle multiple requests per instance
+- Implement idempotent event handlers using event.id as a dedup key stored in a processedEvents collection
+- Set custom claims via Admin SDK (auth.setCustomUserClaims) for role-based access, not by storing roles only in Firestore documents
+- Use defineSecret from firebase-functions/params for secrets management in Cloud Functions instead of environment variables
+- Show blocking functions (beforeUserCreated, beforeUserSignedIn) from firebase-functions/v2/identity for auth guardrails
+
+## Must NOT Do
+- Must NOT use namespaced imports like 'import firebase from firebase/app' -- always use modular v11 SDK imports
+- Must NOT use Cloud Functions v1 (firebase-functions/https) -- must use Gen 2 (firebase-functions/v2/https) with concurrency configuration
+- Must NOT use offset() for pagination -- must use cursor-based pagination with startAfter()
+- Must NOT store roles only in Firestore documents for access control -- must use custom claims on the auth token
+
+## Code Examples Must Include
+- A Cloud Function Gen 2 using onDocumentCreated or onDocumentUpdated from firebase-functions/v2/firestore with region, memory, and concurrency options
+- Custom claims setup using getAuth().setCustomUserClaims() from firebase-admin/auth and a callable function (onCall) that verifies the caller's admin role before setting claims
+- Firestore denormalization with batch writes (db.batch()) to update denormalized data across multiple documents
+- Singleton Firebase initialization pattern using getApps().length === 0 check with emulator connections for development

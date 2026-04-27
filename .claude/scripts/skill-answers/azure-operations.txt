@@ -1,0 +1,22 @@
+# Answer Guidelines: azure-operations
+
+## Must Cover
+- Deploy a Log Analytics workspace (`Microsoft.OperationalInsights/workspaces`) with `retentionInDays` set (e.g., 90 days) and an Application Insights resource (`Microsoft.Insights/components`) linked to it via `WorkspaceResourceId` with `IngestionMode: 'LogAnalytics'`
+- Create scheduled query rule alerts (`Microsoft.Insights/scheduledQueryRules`) for both error rate and latency monitoring, with KQL queries that compute error rate percentage and P95 latency, using appropriate `evaluationFrequency` and `windowSize` intervals
+- Define an Action Group (`Microsoft.Insights/actionGroups`) with multiple notification channels (at minimum `emailReceivers` and `webhookReceivers` for PagerDuty or similar) using `useCommonAlertSchema: true`
+- Include production KQL queries for SLI/SLO monitoring that calculate `Availability = (SuccessRequests * 100.0) / TotalRequests` and compare against thresholds (e.g., 99.9% availability, P95 < 300ms)
+- Configure Managed Identity using `Microsoft.ManagedIdentity/userAssignedIdentities` with RBAC role assignments (`Microsoft.Authorization/roleAssignments`) granting least-privilege access (e.g., `Key Vault Secrets User`, `Storage Blob Data Contributor`) scoped to specific resources
+- Set up Key Vault (`Microsoft.KeyVault/vaults`) with `enableRbacAuthorization: true`, `enableSoftDelete: true`, `enablePurgeProtection: true`, and `publicNetworkAccess: 'Disabled'`
+- Configure budget alerts (`Microsoft.Consumption/budgets`) with at least two notification thresholds: an `Actual` threshold at 80% and a `Forecasted` threshold at 100%
+
+## Must NOT Do
+- Must NOT use service principal secrets for CI/CD authentication (must use OIDC federation with `id-token: write` permission)
+- Must NOT use Key Vault access policies instead of RBAC authorization (`enableRbacAuthorization: true` is required)
+- Must NOT skip Log Analytics retention configuration (unbounded retention leads to cost growth)
+- Must NOT use a single Action Group for all alert severities (separate oncall channels by severity level)
+
+## Code Examples Must Include
+- A Log Analytics workspace and Application Insights resource pair linked via `WorkspaceResourceId`, with the Application Insights `IngestionMode` set to `LogAnalytics`
+- At least one `Microsoft.Insights/scheduledQueryRules` alert resource with an inline KQL query that computes error rate or latency percentiles, including `evaluationFrequency`, `windowSize`, and `failingPeriods` configuration
+- An Action Group resource (`Microsoft.Insights/actionGroups`) with both `emailReceivers` and `webhookReceivers` arrays configured
+- A Managed Identity resource with at least one `Microsoft.Authorization/roleAssignments` showing `roleDefinitionId`, `principalId`, and `principalType: 'ServicePrincipal'` scoped to a specific resource

@@ -1,0 +1,23 @@
+# Answer Guidelines: node-testing
+
+## Must Cover
+- Use Vitest as the test framework with proper configuration (vitest.config.ts) including coverage via v8 provider and setupFiles for global test setup
+- Write integration tests using Supertest to test full HTTP request/response cycles, asserting status codes, content types, and response bodies
+- Mock external services (e.g., email, payment) using vi.mock() for module-level mocking and vi.fn() for individual function mocks
+- Test database transactions by verifying atomicity — assert that partial failures roll back all changes
+- Test authentication flows including unauthenticated requests (expect 401), invalid tokens, and valid Bearer token requests via .set('Authorization', `Bearer ${token}`)
+- Clean up database state after each test using afterEach with table truncation to prevent test pollution
+- Use vi.spyOn() to track method calls and vi.useFakeTimers()/vi.advanceTimersByTime() for time-dependent logic like token expiry
+- Test error paths explicitly — cover 400 (validation), 401 (unauthorized), 409 (conflict/duplicate), and 500 responses
+
+## Must NOT Do
+- Do not share mutable state between tests — each test must set up and tear down its own data to avoid flaky ordering-dependent tests
+- Do not use real external services (email APIs, payment gateways) in unit tests — always mock them with vi.mock() or vi.fn()
+- Do not test implementation details (private methods, internal state) — test observable behavior through public APIs and HTTP responses
+- Do not skip timeout configuration for container-based tests — use the timeout parameter (e.g., 60000ms) in beforeAll when starting testcontainers
+
+## Code Examples Must Include
+- A Supertest integration test using request(app).post('/api/users').send({...}).expect(201) with response body assertions via toMatchObject
+- A vi.mock() call for an external service module, with vi.fn() verifying the mock was called with expected arguments (toHaveBeenCalledWith)
+- An afterEach block that truncates database tables or calls vi.clearAllMocks() to reset state between tests
+- A test for authentication flow using .set('Authorization', `Bearer ${token}`) and asserting both 401 for missing auth and 200 for valid auth

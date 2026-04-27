@@ -1,0 +1,23 @@
+# Answer Guidelines: node-performance
+
+## Must Cover
+- Use Node.js clustering (cluster module) to fork workers across all available CPU cores, with automatic worker restart on exit
+- Offload CPU-intensive tasks to worker threads (worker_threads module) to avoid blocking the event loop, communicating via parentPort.postMessage
+- Implement multi-layer caching with an in-memory LRU cache (lru-cache with max size and TTL) as L1 and Redis as L2, with a cache-aside read pattern (check L1, then L2, then database)
+- Implement cache invalidation on writes — delete from both LRU and Redis when data is updated (lruCache.delete + redis.del)
+- Detect memory leaks by monitoring process.memoryUsage() (rss, heapTotal, heapUsed) at intervals and optionally writing heap snapshots via v8.writeHeapSnapshot()
+- Use streaming (stream/promises pipeline) for large data responses instead of buffering entire payloads into memory
+- Set up structured logging with Pino including sensitive data redaction (req.headers.authorization, req.body.password) and child loggers for module context
+- Implement connection pooling for database connections and configure BullMQ workers with concurrency limits and exponential backoff retries
+
+## Must NOT Do
+- Do not run CPU-intensive work (image processing, data analysis, encryption) on the main event loop thread — always use worker threads or a separate process
+- Do not load entire large files or datasets into memory — use Node.js streams and pipeline for processing
+- Do not implement caching without an invalidation strategy — stale cached data leads to consistency bugs
+- Do not log sensitive data (passwords, tokens, PII) — configure Pino redact paths to strip them from log output
+
+## Code Examples Must Include
+- A cluster setup using cluster.isPrimary to fork os.cpus().length workers, with cluster.on('exit') to auto-restart dead workers
+- A multi-layer cache function that checks LRU cache first, then Redis, then database, populating both caches on miss (lruCache.get -> redis.get -> db query -> lruCache.set + redis.setEx)
+- A worker thread pattern using new Worker('./worker.js', { workerData }) with Promise-based resolve on 'message' event and reject on 'error' event
+- A Pino logger configuration with redact paths array, custom serializers (pino.stdSerializers.req/res/err), and a child logger example (logger.child({ module: 'users' }))

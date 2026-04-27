@@ -1,0 +1,23 @@
+# Answer Guidelines: observability-practices
+
+## Must Cover
+- OpenTelemetry NodeSDK initialization with `Resource` (ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION, ATTR_DEPLOYMENT_ENVIRONMENT), `OTLPTraceExporter`, `OTLPMetricExporter`, and `getNodeAutoInstrumentations`
+- Manual instrumentation with custom spans using `tracer.startActiveSpan()`, setting attributes (`span.setAttribute`), recording exceptions (`span.recordException`), and proper `span.end()` in finally blocks
+- Trace/log correlation by injecting `trace_id` and `span_id` into structured log output via pino mixin using `trace.getSpan(context.active()).spanContext()`
+- OpenTelemetry Collector configuration with receivers (OTLP gRPC/HTTP), processors (batch, memory_limiter, tail_sampling), and exporters (Tempo for traces, Mimir/Prometheus for metrics, Loki for logs)
+- SLO-driven alerting with burn rate alerts: 14.4x fast burn over 1h window (critical/page) and 6x slow burn over 6h window (warning/ticket)
+- Four Golden Signals: Latency (`http_request_duration_seconds`), Traffic (`http_requests_total`), Errors (5xx rate), Saturation (CPU/queue depth)
+- Grafana LGTM stack: Loki for logs, Grafana for visualization, Tempo for traces, Mimir for metrics, with data source correlations linking trace_id from logs to traces
+- Tail sampling in OTel Collector: keep all errors (status_code ERROR), keep slow traces (latency threshold), probabilistic sampling for the rest
+
+## Must NOT Do
+- Store 100% of traces without sampling; must use tail sampling with policies for errors, slow traces, and probabilistic fallback
+- Alert on CPU/memory usage instead of SLO burn rates; alert on user-facing impact
+- Create metrics without labels (e.g., `http_requests_total` must have status_code, method, route)
+- Fire alerts without runbook links; every alert annotation must include `runbook_url` or `summary` with actionable steps
+
+## Code Examples Must Include
+- OpenTelemetry NodeSDK setup with `new NodeSDK({ resource, traceExporter, metricReader, instrumentations })` and `sdk.start()`
+- Manual span creation with `tracer.startActiveSpan('operationName', async (span) => { ... span.end() })` including error handling with `SpanStatusCode.ERROR`
+- OpenTelemetry Collector YAML with `service.pipelines` defining separate traces, metrics, and logs pipelines with receivers, processors, and exporters
+- Burn rate alert rules in Prometheus format with multi-window approach (1h and 5m windows for fast burn, 6h for slow burn) using `rate(http_requests_total{status=~"5.."}[window])` expressions

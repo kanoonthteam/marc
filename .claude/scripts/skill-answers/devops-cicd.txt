@@ -1,0 +1,23 @@
+# Answer Guidelines: devops-cicd
+
+## Must Cover
+- Reusable workflows using `workflow_call` trigger with typed inputs and secrets
+- Matrix builds with `strategy.matrix` for testing across multiple Node.js versions and OS combinations
+- Caching strategies: pnpm cache via `actions/setup-node@v4`, Docker layer caching via `docker/build-push-action@v6` with `cache-from: type=gha`, and custom caching with `actions/cache@v4`
+- Environment protection rules with `environment:` key for staging and production, requiring manual approval for production
+- Concurrency control using `concurrency.group` with `cancel-in-progress` to prevent simultaneous deployments
+- Quality gate pipeline ordering: lint -> typecheck -> unit-test -> build -> integration-test -> deploy:staging -> smoke-test -> deploy:production
+- Deployment strategy selection: blue-green, canary (Argo Rollouts), or rolling update with specific configuration examples
+- Immutable artifacts principle: build once, deploy the same artifact to every environment
+
+## Must NOT Do
+- Recommend using `latest` tags for base images or dependencies in CI
+- Store secrets in code; must use GitHub Secrets, Vault, or cloud-native secret managers
+- Deploy directly from local machines bypassing CI quality gates
+- Recommend long-running pipelines (30+ minutes) without suggesting path filters or splitting into parallel jobs
+
+## Code Examples Must Include
+- A `workflow_call` reusable workflow definition with `inputs` and `secrets` blocks, referencing `pnpm/action-setup@v4` and `actions/setup-node@v4`
+- A matrix build configuration with `fail-fast: false` and `exclude` rules
+- An environment-gated deployment job with `needs:` dependencies, `environment:` key, and `secrets.PRODUCTION_DEPLOY_TOKEN`
+- A concurrency block with `group: deploy-${{ github.ref }}` and `cancel-in-progress: true`

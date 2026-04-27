@@ -1,0 +1,23 @@
+# Answer Guidelines: odoo-models
+
+## Must Cover
+- Define computed fields with `store=True`, proper `@api.depends` decorators, and batch computation pattern (iterating `for record in self`)
+- Include both Python constraints (`@api.constrains` with `ValidationError`) and SQL constraints (`_sql_constraints` with CHECK or UNIQUE)
+- Demonstrate domain filter syntax for search operations, including Polish notation for complex domains using `&` and `|` operators
+- Show multi-company support with `company_id = fields.Many2one('res.company', default=lambda self: self.env.company)` and `_sql_constraints` for company-scoped uniqueness
+- Implement access rules via `ir.model.access.csv` with separate rows for user and manager groups, plus record rules in XML with `noupdate="1"`
+- Use correct field options: `index=True` on frequently searched fields, `tracking=True` on state/important fields, `ondelete='restrict'` on Many2one fields
+- Include `_inherit = ['mail.thread', 'mail.activity.mixin']` for chatter integration on the main model
+- Demonstrate proper CRUD override pattern: call `super()` first or last as appropriate, use `ensure_one()` in action methods, raise `UserError` for business rule violations in `unlink()`
+
+## Must NOT Do
+- Must NOT use `@api.onchange` for business logic (computed fields should be used instead; onchange is only for UI hints)
+- Must NOT loop with individual `write()` calls per record instead of a single batch `self.write(vals)` on the recordset
+- Must NOT use Python loops for aggregation when `read_group` with SQL GROUP BY would be appropriate
+- Must NOT omit `ondelete` parameter on Many2one fields (letting it silently default to `set null`)
+
+## Code Examples Must Include
+- A stored computed field with `@api.depends` that iterates over `self` and computes from One2many line fields (e.g., `sum(line.amount * line.quantity for line in record.line_ids)`)
+- A `_sql_constraints` list with at least one UNIQUE or CHECK constraint including the constraint name, SQL expression, and error message
+- A Python `@api.constrains` method that raises `ValidationError` from `odoo.exceptions`
+- A Many2many field with an explicitly named relation table: `fields.Many2many('model', 'relation_table', 'col1', 'col2')`

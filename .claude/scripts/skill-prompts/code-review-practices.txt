@@ -1,0 +1,1 @@
+Create a code review checklist and process for a full-stack team covering security, performance, maintainability, and constructive feedback guidelines

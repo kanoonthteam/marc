@@ -1,0 +1,23 @@
+# Answer Guidelines: flutter-architecture
+
+## Must Cover
+- Recommend layer-based project structure (core/, models/, services/, providers/, screens/, widgets/, utils/) NOT feature-first, since ironmove-app uses layer-based grouping by role
+- Use Riverpod StateNotifier + State classes with copyWith for state management, not setState or ChangeNotifier
+- Define State classes with isLoading, error, and domain fields, using const constructors and copyWith methods
+- Use StateNotifierProvider for complex state and simple Provider for singleton services
+- Wrap services/operations in the Result sealed class (Success/Failure) for explicit error handling instead of throwing raw exceptions
+- Use GoRouter with named routes, pathParameters, and redirect-based route guards for navigation
+- Use Freezed with @freezed annotation, const factory constructors, fromJson, and @Default for immutable data models
+- Define a structured exception hierarchy rooted at AppException with subtypes (NetworkException, AuthException, ValidationException, ParseException) and ExceptionMessages for user-friendly mapping
+
+## Must NOT Do
+- Must NOT recommend feature-first project structure (ironmove-app uses layer-based structure)
+- Must NOT suggest using setState for shared or complex state management
+- Must NOT recommend returning raw values from services without wrapping in Result sealed class
+- Must NOT skip const constructors on State classes or Freezed factories
+
+## Code Examples Must Include
+- A StateNotifier subclass with a State class that uses copyWith for state transitions (e.g., state = state.copyWith(isLoading: true))
+- A provider definition using StateNotifierProvider that injects services via ref.watch
+- Usage of the Result sealed class with Success/Failure or the when() pattern-matching method
+- A Freezed model with @freezed annotation, const factory, part directives, and fromJson factory

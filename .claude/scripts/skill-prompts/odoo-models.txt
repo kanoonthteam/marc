@@ -1,0 +1,1 @@
+Create an Odoo module with computed fields, domain constraints, SQL constraints, and multi-company access rules

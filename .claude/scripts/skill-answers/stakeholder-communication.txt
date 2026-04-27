@@ -1,0 +1,23 @@
+# Answer Guidelines: stakeholder-communication
+
+## Must Cover
+- Produce a RAG (Red/Amber/Green) status dashboard with module-level status, overall project status, and clear RAG definitions (Green: on track; Amber: at risk, mitigation in progress; Red: off track, escalation needed)
+- Include milestone tracking with Planned Date, Forecast Date, and Status columns, plus impact assessment showing how delays cascade to downstream milestones
+- Build a risk register with ID, Risk description, Probability, Impact, Score (using the probability x impact scoring matrix), Mitigation, Owner, and Status columns
+- Define escalation criteria at multiple levels: Engineering Manager (blocker > 2 days), Director/VP (milestone > 2 weeks late, budget > 10% over), C-Level (project completion at risk, budget > 20% over)
+- Provide an executive summary template with TL;DR, Progress This Period, Key Risks (with owner and mitigation), Decisions Needed, Budget Status, and Next Period Plan sections
+- Create a RACI matrix for project activities with exactly one Accountable (A) per row, and explain the distinction between Responsible, Accountable, Consulted, and Informed roles
+- Include a communication plan table mapping each audience (Steering Committee, Product Owner, Dev Team, End Users) to content type, frequency, channel, and owner
+- Address stakeholder mapping using the influence/interest grid: Manage Closely (high influence, high interest), Keep Satisfied (high influence, low interest), Keep Informed (low influence, high interest), Monitor (low influence, low interest)
+
+## Must NOT Do
+- Hide bad news or delay risk communication -- surprises erode trust faster than transparent reporting of problems with mitigation plans
+- Create one-size-fits-all reports -- executives need outcomes and budget status, engineers need technical details; adapt the message to the audience
+- Hold meetings without agendas -- every meeting must have a structured agenda with time allocations, topics, owners, and type (Info/Demo/Discussion/Decision)
+- Build a RACI matrix without enforcing it -- every row must have exactly one A, and too many C's slow decisions down
+
+## Code Examples Must Include
+- A RAG status dashboard in markdown with module-level table (Module, Status with color indicator, Progress %, Notes) and overall project status
+- A risk register table with ID, Risk, Probability (High/Medium/Low), Impact (High/Medium/Low), Score (numeric), Mitigation strategy, Owner, and Status columns for at least 4 risks
+- An escalation template with What (issue description), Impact (consequences if unresolved), Options (2-3 with trade-offs), Recommendation, and Decision Needed By date
+- A RACI matrix table with activities as rows, roles as columns (PM, Tech Lead, Dev Team, QA, Product, Exec), and R/A/C/I designations ensuring exactly one A per row

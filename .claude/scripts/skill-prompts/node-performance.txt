@@ -1,0 +1,1 @@
+Optimize a Node.js service handling 10k concurrent connections with connection pooling, worker threads, and memory leak detection

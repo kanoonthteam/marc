@@ -1,0 +1,23 @@
+# Answer Guidelines: aws-data
+
+## Must Cover
+- Create a rds.DatabaseCluster with auroraPostgres engine using Aurora Serverless v2 (ClusterInstance.serverlessV2) for both writer and readers
+- Configure serverlessV2MinCapacity and serverlessV2MaxCapacity for auto-scaling ACU capacity
+- Set up read replicas using rds.ClusterInstance.serverlessV2 in the readers array with scaleWithWriter enabled
+- Enable automated backups with backup.retention (e.g., Duration.days(30)) and a preferredWindow
+- Enable storageEncrypted: true and deletionProtection: true on the database cluster
+- Use rds.Credentials.fromGeneratedSecret for secure credential management via Secrets Manager
+- Configure cross-region replication or a Global Database for disaster recovery
+- Place the cluster in PRIVATE_ISOLATED subnets with proper VPC subnet selection
+
+## Must NOT Do
+- Open RDS security groups to 0.0.0.0/0 -- always restrict to VPC CIDRs and use private subnets
+- Skip connection pooling when Lambda connects to the database -- use RDS Proxy to prevent connection exhaustion
+- Omit encryption at rest (storageEncrypted) or deletion protection for production databases
+- Use provisioned IOPS (io2) without benchmarking first -- start with gp3 storage type
+
+## Code Examples Must Include
+- new rds.DatabaseCluster with engine: rds.DatabaseClusterEngine.auroraPostgres and serverlessV2 writer/readers
+- credentials: rds.Credentials.fromGeneratedSecret('dbadmin') for Secrets Manager integration
+- backup: { retention: cdk.Duration.days(N), preferredWindow: 'HH:MM-HH:MM' } configuration
+- storageEncrypted: true and deletionProtection: true in the cluster properties

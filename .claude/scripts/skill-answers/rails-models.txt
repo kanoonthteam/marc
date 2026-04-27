@@ -1,0 +1,23 @@
+# Answer Guidelines: rails-models
+
+## Must Cover
+- Define a polymorphic `belongs_to :commentable, polymorphic: true` association on the Comment model with corresponding `has_many :comments, as: :commentable` on Post, Photo, and Video models
+- Include `dependent: :destroy` on the `has_many` side of the polymorphic association to handle cascade deletion
+- Create the migration with `t.references :commentable, polymorphic: true, null: false` to generate both `commentable_type` and `commentable_id` columns
+- Add validations on the Comment model (e.g., `validates :body, presence: true`) and demonstrate conditional or custom validations
+- Define scopes using lambda syntax (e.g., `scope :recent, -> { order(created_at: :desc) }`) that are composable and chainable
+- Implement counter caches with `belongs_to :commentable, counter_cache: true` and the corresponding migration adding a `comments_count` column with `default: 0, null: false`
+- Use `after_create_commit` (not `after_save`) for any side-effect callbacks like notifications or indexing
+- Follow the canonical model ordering: constants, extensions, attributes, associations, validations, callbacks, scopes, class methods, instance methods, private methods
+
+## Must NOT Do
+- Must NOT use `default_scope` to filter records (use explicit named scopes instead)
+- Must NOT use `after_save` for external side effects like sending emails or enqueuing jobs (use `after_commit` variants)
+- Must NOT create the polymorphic migration without database indexes on the polymorphic columns
+- Must NOT chain complex business logic inside model callbacks (should recommend service objects for complex orchestration)
+
+## Code Examples Must Include
+- A Comment model with `belongs_to :commentable, polymorphic: true` and at least one target model with `has_many :comments, as: :commentable, dependent: :destroy`
+- A `create_table :comments` migration block using `t.references :commentable, polymorphic: true, null: false`
+- At least one scope defined with lambda syntax (e.g., `scope :recent, -> { order(created_at: :desc) }`)
+- A `counter_cache: true` declaration on a `belongs_to` association with the matching `add_column` migration for the count column

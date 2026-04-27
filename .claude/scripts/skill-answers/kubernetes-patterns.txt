@@ -1,0 +1,23 @@
+# Answer Guidelines: kubernetes-patterns
+
+## Must Cover
+- ArgoCD Application CRD with `syncPolicy.automated` (prune and selfHeal), `retry` backoff, and `ignoreDifferences` for HPA-managed replicas
+- GitOps repository structure with `apps/{service}/base/` and `apps/{service}/overlays/{env}/` using Kustomize base and overlay pattern
+- HorizontalPodAutoscaler (HPA) v2 with CPU/memory utilization targets, custom metrics, and `behavior` block controlling `scaleUp`/`scaleDown` stabilization windows and policies
+- Network policies starting with default-deny-all for both Ingress and Egress, then explicitly allowing required traffic paths (ingress controller to API, API to database, DNS resolution)
+- RBAC with namespace-scoped Role and RoleBinding for developers, and ClusterRole/ClusterRoleBinding for cross-namespace read access
+- Deployment spec with readinessProbe and livenessProbe (httpGet on /health), resource requests AND limits, and `terminationGracePeriodSeconds`
+- Pod Security Standards using namespace labels (`pod-security.kubernetes.io/enforce: restricted`) with `runAsNonRoot`, `readOnlyRootFilesystem`, and `drop: ["ALL"]` capabilities
+- ArgoCD AppProject for production with restricted `sourceRepos`, `destinations`, and RBAC `roles` policies
+
+## Must NOT Do
+- Use `latest` image tag in production deployments; must pin specific version tags
+- Store Kubernetes Secrets in Git even if base64-encoded; must use External Secrets Operator or sealed secrets
+- Run containers as root; must set `runAsNonRoot: true` and `allowPrivilegeEscalation: false`
+- Deploy single-replica production workloads; must have multiple replicas for high availability
+
+## Code Examples Must Include
+- An ArgoCD Application YAML with `source.repoURL`, `source.path` pointing to Kustomize overlay, `syncPolicy.automated` with `prune: true` and `selfHeal: true`
+- An HPA v2 manifest (`autoscaling/v2`) with `scaleTargetRef`, `minReplicas`/`maxReplicas`, resource-based and custom metrics, and `behavior` block
+- A NetworkPolicy YAML with `default-deny` policy and a second policy allowing specific ingress/egress with `podSelector`, `namespaceSelector`, and port specifications
+- An RBAC Role/RoleBinding pair scoped to a namespace with specific `apiGroups`, `resources`, and `verbs`

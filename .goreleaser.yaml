@@ -1,0 +1,55 @@
+project_name: marc
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - id: marc
+    main: ./cmd/marc
+    binary: marc
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+  - id: marc-server-amd64
+    main: ./cmd/marc-server
+    binary: marc-server
+    goos: [linux]
+    goarch: [amd64]
+    env:
+      - CGO_ENABLED=1
+      - CC=gcc
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+  - id: marc-server-arm64
+    main: ./cmd/marc-server
+    binary: marc-server
+    goos: [linux]
+    goarch: [arm64]
+    env:
+      - CGO_ENABLED=1
+      - CC=aarch64-linux-gnu-gcc
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+archives:
+  - id: marc
+    builds: [marc]
+    format: binary
+    name_template: 'marc-{{ .Os }}-{{ .Arch }}'
+  - id: marc-server
+    builds: [marc-server-amd64, marc-server-arm64]
+    format: binary
+    name_template: 'marc-server-{{ .Os }}-{{ .Arch }}'
+checksum:
+  name_template: 'checksums.txt'
+release:
+  github:
+    owner: caffeaun
+    name: marc

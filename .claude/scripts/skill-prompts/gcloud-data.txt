@@ -1,0 +1,1 @@
+Design a BigQuery data warehouse with partitioned tables, materialized views, and Dataflow streaming pipeline

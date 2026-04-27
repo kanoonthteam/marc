@@ -1,0 +1,23 @@
+# Answer Guidelines: devops-monitoring
+
+## Must Cover
+- Prometheus scrape configuration with `scrape_configs`, `scrape_interval`, `rule_files`, and `alerting` sections
+- Custom application metrics using prom-client: Counter (`http_requests_total`), Histogram (`http_request_duration_seconds` with explicit buckets), and Gauge (`http_active_connections`)
+- Recording rules to pre-compute expensive queries (e.g., `api:request_rate:5m`, `api:error_rate:5m`, `api:latency_p95:5m`)
+- Grafana dashboard design following RED method (Rate, Errors, Duration) or Four Golden Signals (Latency, Traffic, Errors, Saturation)
+- Alerting strategy based on symptom-based alerting (user-facing impact) with severity levels (critical pages on-call, warning notifies Slack)
+- SLO definitions with error budget calculation (e.g., 99.9% SLO = 43.2 minutes downtime over 30 days)
+- Structured logging with pino, JSON format, correlation IDs propagated across services, and sensitive data redaction
+- PagerDuty integration via Alertmanager or Grafana unified alerting with runbook URLs on every alert
+
+## Must NOT Do
+- Alert on internal causes like CPU > 80% instead of user-facing symptoms like error rate > 5%
+- Create alerts without runbook URLs and investigation steps
+- Use unstructured free-text logs in production; must use structured JSON logging
+- Set alert `for` duration below 2 minutes, which causes flapping alerts
+
+## Code Examples Must Include
+- A Prometheus scrape config YAML with `job_name`, `metrics_path`, and `static_configs` targeting the application
+- Node.js instrumentation using `prom-client` with Registry, Counter, Histogram, and a `/metrics` endpoint
+- Recording rules YAML with `groups`, `interval`, `record`, and `expr` fields for error rate and latency p95
+- An alert rule (Prometheus or Grafana) with `severity` label, `for` duration, `summary` annotation, and `runbook_url` annotation

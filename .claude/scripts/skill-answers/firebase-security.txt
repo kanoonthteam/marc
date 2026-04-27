@@ -1,0 +1,23 @@
+# Answer Guidelines: firebase-security
+
+## Must Cover
+- Define reusable helper functions in Firestore rules: isSignedIn(), isOwner(userId), hasRole(role), hasAnyRole(roles), isAdmin(), incomingData(), existingData()
+- Use onlyAllowedFields() helper with incomingData().keys().hasOnly(fields) to reject writes with unexpected fields
+- Validate data on every create/update: check field types with isValidString(field, minLen, maxLen), enforce server timestamps with request.time, and validate enums with 'in' operator
+- Protect immutable fields on updates using fieldNotChanged() that checks request.resource.data.diff(resource.data).affectedKeys()
+- Implement role-based access control (RBAC) via custom claims checked with request.auth.token.role in security rules, not via Firestore document reads
+- Write unit tests using @firebase/rules-unit-testing with initializeTestEnvironment, assertSucceeds, assertFails, authenticatedContext, and unauthenticatedContext
+- Define Storage Security Rules that validate contentType (e.g., matches 'image/(png|jpeg|gif|webp)') and enforce max file size (request.resource.size)
+- Show hierarchical rules for nested resources (e.g., boards/{boardId}/columns/{columnId}/cards/{cardId}) with parent-scoped helper functions like isBoardMember()
+
+## Must NOT Do
+- Must NOT use 'allow read, write: if true' -- always deny by default and explicitly grant per-collection access
+- Must NOT check roles via Firestore get() calls in rules (10 get() call limit per request) -- use custom claims on request.auth.token instead
+- Must NOT trust client-provided timestamps -- validate server timestamps using isServerTimestamp(field) that checks field == request.time
+- Must NOT skip Storage contentType validation -- without type checks users can upload executables disguised as images
+
+## Code Examples Must Include
+- Complete firestore.rules file with rules_version = '2', helper functions block, and at least one collection with separate create/read/update/delete rules using the helpers
+- Storage rules (service firebase.storage) with contentType matching and file size validation using request.resource.size and request.resource.contentType
+- Unit test file using @firebase/rules-unit-testing showing testEnv.authenticatedContext with custom claims (e.g., { role: 'admin' }), assertSucceeds, and assertFails
+- A callable Cloud Function (onCall from firebase-functions/v2/https) for setting custom claims via admin SDK that verifies the caller has admin role before proceeding

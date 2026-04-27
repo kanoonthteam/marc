@@ -1,0 +1,23 @@
+# Answer Guidelines: testing-verification
+
+## Must Cover
+- AC verification matrix format: table with #, Acceptance Criterion, Method (API test/unit test/code review), Result (PASS/FAIL), Evidence columns
+- Edge case testing for inputs: empty/whitespace strings, maximum length boundary (at and beyond), Unicode/emoji, HTML/script injection, SQL injection strings
+- Edge case testing for state: empty state (no data), single item, pagination boundary, page beyond total, concurrent modifications, resource not found, already deleted
+- Numeric edge cases: zero, negative numbers, MAX_SAFE_INTEGER, NaN, Infinity, floating point for integer fields
+- Bug report template: Title (verb-first), Severity (Critical/Major/Minor), Priority (P0-P3), Steps to Reproduce with curl commands, Expected vs Actual Result, Evidence
+- QA report template: Summary (X/Y AC passed, N bugs found), AC verification table, Edge Cases Tested checklist, Bugs Found section, Regression results, Recommendation (PASS/CONDITIONAL PASS/FAIL)
+- Risk-based regression: identify what must be retested based on change type (route handler -> all tests for that resource, middleware -> all route tests, store -> all integration tests)
+- Severity vs Priority matrix: Critical+P0 for security/data loss, Major+P1 for partially broken features, Minor+P2/P3 for cosmetic issues
+
+## Must NOT Do
+- Must NOT write vague bug reports like "it doesn't work" — must include exact steps to reproduce, expected result, actual result, and evidence
+- Must NOT test only the happy path — most bugs live in error paths and edge cases (null, empty, boundary values)
+- Must NOT skip regression testing because "only one file changed" — shared modules, middleware, and store changes can break unrelated features
+- Must NOT inflate severity — accurate classification enables correct prioritization
+
+## Code Examples Must Include
+- Edge case test for string validation: test empty string, whitespace-only, max length boundary (exactly at limit and one beyond), HTML/XSS injection with expect assertions
+- State edge case test: test empty state returning empty array with meta.total=0, test resource not found returning 404, test deleting already-deleted resource returning 404
+- QA report in markdown: AC verification table with PASS/FAIL status, edge cases tested checklist, bugs found section with severity, regression results, and recommendation
+- Bug report in markdown: Title, Severity, Priority, Steps to Reproduce with curl command, Expected Result with status code and body, Actual Result with status code and error body

@@ -1,0 +1,23 @@
+# Answer Guidelines: chaos-engineering
+
+## Must Cover
+- The chaos experiment framework: define steady state, hypothesize, inject failure, observe, learn, fix & repeat
+- Chaos Mesh YAML manifests for Kubernetes including NetworkChaos (delay/partition), PodChaos (pod-kill), and StressChaos (CPU/memory) with proper `apiVersion: chaos-mesh.org/v1alpha1`, `selector`, `labelSelectors`, `mode`, and `duration` fields
+- Pod failure experiment using PodChaos with `action: pod-kill`, targeting e-commerce services by label selector, with a scheduler for recurring execution
+- Network latency injection using NetworkChaos with `action: delay`, specifying `latency`, `jitter`, and `correlation` parameters targeting specific services
+- Database failover testing via NetworkChaos `action: partition` between application pods and database pods, with `direction: both` and `target` selector
+- Steady-state hypothesis with measurable SLO metrics (e.g., p99 latency < 200ms, error rate < 0.1%) and explicit abort criteria (e.g., error rate > 10%)
+- Blast radius limitation following the progressive complexity model: dev -> staging -> canary (1-5%) -> single AZ -> full production
+- Safety controls including abort conditions, time limits (duration field), scope limits (label selectors), manual override, and team notification
+
+## Must NOT Do
+- Run chaos experiments directly in full production without starting in non-production or canary environments first
+- Design experiments without defining steady-state metrics, hypothesis, and abort criteria upfront (random fault injection without measurement)
+- Create experiments without observability in place -- you cannot learn from failures you cannot see
+- Omit the `duration` field or abort mechanism from any chaos experiment definition
+
+## Code Examples Must Include
+- A Chaos Mesh NetworkChaos YAML with `action: delay`, `latency`, `jitter`, label selectors targeting an e-commerce service, and a `duration` field
+- A Chaos Mesh PodChaos YAML with `action: pod-kill`, `mode`, namespace and label selectors for pod failure simulation
+- A Chaos Mesh NetworkChaos YAML with `action: partition` simulating database failover, including `target` selector with database labels and `direction: both`
+- A Chaos Mesh Workflow YAML using `templateType: Serial` to chain multiple experiments (network delay, pod kill, verify recovery) into a multi-step resilience test

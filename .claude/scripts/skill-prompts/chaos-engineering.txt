@@ -1,0 +1,1 @@
+Design chaos experiments for a Kubernetes-deployed e-commerce platform testing pod failure, network latency, and database failover

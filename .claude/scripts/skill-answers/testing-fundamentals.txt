@@ -1,0 +1,23 @@
+# Answer Guidelines: testing-fundamentals
+
+## Must Cover
+- Testing pyramid structure with ratios: unit tests (65-80%), integration tests (15-25%), E2E tests (5-10%) and what to test at each layer
+- AAA pattern (Arrange, Act, Assert) with clear separation of each phase in the payment processing test examples
+- Test naming convention using "should [behavior] when [condition]" pattern with specific payment processing scenarios
+- Mocking guidelines: mock external payment gateways and APIs, use dependency injection over module mocking for the payment service
+- Factory functions for creating test data (e.g., createPayment, createOrder overrides pattern) instead of raw object literals
+- Test isolation: each test independent, clean state between tests via beforeEach, no shared mutable state
+- Coverage targets: 90%+ for business logic (payment calculations), 80%+ for API routes, measure branch coverage not just line coverage
+- TDD workflow (Red-Green-Refactor) applied to payment processing — write failing test for payment validation first, then implement
+
+## Must NOT Do
+- Must NOT mock the payment module under test itself — only mock external dependencies like payment gateway, database, email service
+- Must NOT use conditional logic (if/else) or loops inside test bodies
+- Must NOT write vague test names like "should work" or "handles errors" — must describe specific payment behavior and condition
+- Must NOT chase 100% coverage — focus on testing value, error paths, and boundary conditions in payment amounts
+
+## Code Examples Must Include
+- Vitest test using describe/it blocks with AAA pattern (comments marking Arrange, Act, Assert) for a payment processing scenario
+- Dependency injection pattern: PaymentService constructor accepting store, paymentGateway, and eventBus as injectable test doubles using vi.fn()
+- Factory function pattern like createPayment(overrides: Partial<Payment> = {}): Payment with sensible defaults and spread operator
+- Fake timers usage with vi.useFakeTimers() and vi.advanceTimersByTime() for testing payment expiration or timeout scenarios

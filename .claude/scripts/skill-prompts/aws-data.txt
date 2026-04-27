@@ -1,0 +1,1 @@
+Design a multi-AZ Aurora PostgreSQL cluster with read replicas, automated backups, and cross-region replication using CDK

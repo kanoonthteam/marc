@@ -1,0 +1,1 @@
+Write Odoo test cases with TransactionCase for model logic, HttpCase for controllers, and tagged test categories

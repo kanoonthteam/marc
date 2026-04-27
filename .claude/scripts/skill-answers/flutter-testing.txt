@@ -1,0 +1,23 @@
+# Answer Guidelines: flutter-testing
+
+## Must Cover
+- Use manual mock classes that implement the interface directly with function callbacks for behavior control; do NOT use mockito or any code-generated mocks
+- Test Riverpod providers using ProviderContainer with overrides (overrideWithValue) and always dispose the container in tearDown
+- Test both Success and Failure paths of the Result<T> sealed class, including when() pattern matching and map() chaining
+- Use @visibleForTesting named constructors on services to inject mock dependencies (e.g., SecureStorageService.withStorage(mockStorage))
+- Wrap screen tests in ProviderScope + MaterialApp with localization delegates and a MockGoRouter via InheritedGoRouter
+- Mirror the lib/ directory structure exactly in test/ (e.g., lib/providers/auth_provider.dart maps to test/providers/auth_provider_test.dart)
+- Test all state transitions: loading, success, error, and empty states
+- Use setUp/tearDown for proper test isolation, including clearing singleton cache state between tests
+
+## Must NOT Do
+- Must NOT use mockito, build_runner, or any auto-generated mock packages
+- Must NOT skip disposing ProviderContainer in tearDown (causes memory leaks between tests)
+- Must NOT use tester.pumpAndSettle() with widgets that have infinite animations (will timeout); use tester.pump() with specific duration instead
+- Must NOT use find.byType(Container) for assertions (too fragile); use semantic finders like find.text or find.byType with specific widget types
+
+## Code Examples Must Include
+- A manual mock class that implements a service interface with Function? callback fields (e.g., onSendAuthCode, onVerifyAuthCode) and returns default values when callbacks are null
+- A ProviderContainer setup with overrides injecting mock services, reading state via container.read(provider), and disposing in tearDown
+- A widget test using testWidgets with MaterialApp wrapper, tester.pumpWidget, tester.enterText, tester.tap, and expect with find matchers
+- A createTestWidget helper function that wraps a child in ProviderScope + MaterialApp + localization delegates + MockGoRouter

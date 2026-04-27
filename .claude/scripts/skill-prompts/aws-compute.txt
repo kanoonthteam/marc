@@ -1,0 +1,1 @@
+Create a CDK stack for ECS Fargate service with auto-scaling, ALB health checks, and blue-green deployment

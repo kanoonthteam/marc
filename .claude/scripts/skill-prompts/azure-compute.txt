@@ -1,0 +1,1 @@
+Deploy an AKS cluster with node pools, pod identity, and Terraform with auto-scaling and network policies

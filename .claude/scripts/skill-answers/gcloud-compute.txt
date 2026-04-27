@@ -1,0 +1,23 @@
+# Answer Guidelines: gcloud-compute
+
+## Must Cover
+- Cloud Run service using google_cloud_run_v2_service Terraform resource with VPC connector via vpc_access block and egress set to PRIVATE_RANGES_ONLY
+- Cloud SQL Auth Proxy as a sidecar container in the Cloud Run multi-container YAML (cloud-sql-proxy image with --structured-logs and --port args)
+- Terraform min/max instance scaling via template.scaling block with min_instance_count and max_instance_count
+- Service account assignment on Cloud Run via template.service_account referencing a dedicated google_service_account resource
+- Secret injection from Secret Manager using env.value_source.secret_key_ref in the container definition
+- Health check probes (startup_probe and liveness_probe) with http_get on /health path
+- Gen2 execution environment (execution_environment = "EXECUTION_ENVIRONMENT_GEN2") and startup_cpu_boost enabled
+- VPC connector resource (google_vpc_access_connector) referenced by the Cloud Run service
+
+## Must NOT Do
+- Must NOT recommend exporting or mounting service account JSON keys; must use Workload Identity or dedicated service accounts instead
+- Must NOT hardcode region values; must use Terraform variables for region
+- Must NOT grant roles/editor or roles/owner to service accounts; must use least-privilege roles like roles/cloudsql.client or roles/secretmanager.secretAccessor
+- Must NOT omit concurrency or scaling settings; must explicitly configure min_instances >= 2 for production
+
+## Code Examples Must Include
+- google_cloud_run_v2_service Terraform resource with vpc_access, scaling, containers, and probe blocks
+- google_vpc_access_connector resource for VPC connectivity
+- Cloud SQL Auth Proxy sidecar container configuration (either in YAML multi-container spec or referenced in Terraform)
+- google_service_account and google_project_iam_member with for_each over specific roles (e.g., roles/cloudsql.client, roles/secretmanager.secretAccessor)

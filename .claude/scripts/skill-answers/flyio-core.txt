@@ -1,0 +1,22 @@
+# Answer Guidelines: flyio-core
+
+## Must Cover
+- Configure fly.toml with primary_region, http_service block including auto_stop_machines, auto_start_machines, and min_machines_running settings
+- Explain Machine lifecycle states (created, started, stopped, suspended, destroyed) and the trade-off between suspend (faster resume, memory preserved) vs stop (less disk usage)
+- Implement fly-replay header middleware to route write requests (POST/PUT/PATCH/DELETE) to the primary region for database consistency
+- Configure volume mounts in fly.toml with [mounts] section (source and destination) and use volume snapshots for disaster recovery
+- Set up private networking using .internal DNS for service-to-service communication (e.g., app-name.internal:port) and region-specific addressing (e.g., nrt.app-name.internal)
+- Use Flycast for private load balancing of internal-only services by allocating a private IPv6 address (fly ips allocate-v6 --private)
+- Configure concurrency limits in [http_service.concurrency] with type (requests/connections), soft_limit (scaling trigger), and hard_limit (rejection threshold)
+- Show multi-region deployment with fly scale count commands for different regions (e.g., fly scale count 2 --region sin, fly scale count 1 --region nrt)
+
+## Must NOT Do
+- Must NOT run databases without attaching volumes -- Machine filesystems are ephemeral and data will be lost
+- Must NOT perform direct cross-region database writes -- use fly-replay header to route writes to the primary region
+- Must NOT allocate dedicated IPv4 for every app ($2/month each) -- use shared IPv4 (fly ips allocate-v4 --shared) or IPv6 unless legacy clients require dedicated
+
+## Code Examples Must Include
+- Complete fly.toml configuration with primary_region, [env] for PRIMARY_REGION, [http_service] block with auto_stop/start settings, concurrency limits, and [mounts] section
+- Express.js or Rails middleware implementing fly-replay that checks FLY_REGION against PRIMARY_REGION and sets the fly-replay response header for write requests
+- Volume management commands showing creation (fly volumes create), snapshot creation (fly volumes snapshots create), and fork to another region (fly volumes fork)
+- Multi-region scale commands with fly scale count for at least two different regions

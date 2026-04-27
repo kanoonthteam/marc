@@ -1,0 +1,23 @@
+# Answer Guidelines: accessibility-testing
+
+## Must Cover
+- WCAG 2.1 AA four principles (POUR): Perceivable (alt text, 4.5:1 contrast ratio), Operable (keyboard accessible, focus order), Understandable (lang attribute, form labels, error messages), Robust (valid HTML, proper ARIA)
+- axe-core integration with Playwright: AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze() and expect(results.violations).toEqual([])
+- jest-axe for component-level testing: render component, run axe(container), expect(results).toHaveNoViolations()
+- Keyboard navigation testing: skip link as first focusable element, tab order follows visual order, modal focus trapping (Tab wraps, Escape closes), focus returns to trigger element
+- Color contrast requirements: normal text 4.5:1, large text 3:1, UI components 3:1 — test with axe-core withRules(['color-contrast'])
+- ARIA patterns: landmark roles (banner, navigation, main, contentinfo), live regions (aria-live="polite" for updates, role="alert" for errors), tab/tabpanel with aria-selected and aria-controls
+- Screen reader testing checklist: page title announced, logical heading hierarchy (h1>h2>h3), form labels associated, error messages announced, dynamic content via live regions
+- Automated vs manual testing boundary: axe-core catches ~30-40% of issues (missing alt text, missing labels, contrast); manual testing needed for alt text quality, logical tab order, meaningful ARIA usage
+
+## Must NOT Do
+- Must NOT use outline: none on :focus without providing a visible alternative focus indicator (at least 2px solid, 3:1 contrast)
+- Must NOT use color alone to convey information (errors, required fields, status) — must supplement with icons, text, or patterns
+- Must NOT use placeholder text as the only label for form inputs — placeholders disappear on input and have insufficient contrast
+- Must NOT rely solely on automated axe-core scanning — it catches only 30-40% of WCAG violations; manual assistive technology testing is essential
+
+## Code Examples Must Include
+- Playwright + AxeBuilder test: page.goto('/'), new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze(), expect(results.violations).toEqual([]) for banking app pages
+- Multi-page accessibility audit: array of {name, path} objects iterated with for..of, each generating a test that runs AxeBuilder.analyze() against that page
+- Keyboard navigation test: page.keyboard.press('Tab'), expect(skipLink).toBeFocused(), modal focus trap test with Tab cycling through dialog buttons and Escape closing
+- Semantic HTML examples showing correct patterns: <button> instead of <div onclick>, <label for="id"> associated with <input id="id">, skip link <a href="#main" class="skip-link">, proper heading hierarchy

@@ -1,0 +1,23 @@
+# Answer Guidelines: react-ui
+
+## Must Cover
+- Implement keyboard navigation for the dropdown/listbox: ArrowDown, ArrowUp to move focus, Enter/Space to select, Escape to close
+- Use ARIA attributes: role="listbox" or role="menu" on the suggestions list, role="option" on each item, aria-expanded on the input/trigger, aria-activedescendant for the focused option
+- Use an aria-live="polite" region to announce the number of suggestions to screen readers (e.g., "5 results found")
+- Implement debounced search using a debounce mechanism (setTimeout/clearTimeout or a useDebounce hook) before firing async fetch
+- Use Radix UI or headless primitives (Combobox/Popover) for accessible base behavior, styled with Tailwind CSS
+- Manage focus: auto-focus the input, trap focus within the suggestion list when open, restore focus when closed
+- Use semantic HTML elements: input with type="search" or role="combobox", proper label elements with htmlFor
+- Handle loading and empty states visually and for screen readers
+
+## Must NOT Do
+- Use a div with onClick instead of a button or proper interactive element for suggestion items (not keyboard accessible)
+- Omit aria-label on the search input or icon-only clear/close buttons
+- Build the dropdown without keyboard navigation support (ArrowDown/ArrowUp/Enter/Escape)
+- Skip announcing dynamic content changes (suggestion count, loading state) to screen readers
+
+## Code Examples Must Include
+- A keyboard event handler (onKeyDown or useEffect with keydown listener) that handles ArrowDown, ArrowUp, Enter, and Escape keys
+- ARIA attributes on the component: aria-expanded, aria-activedescendant, role="combobox" or role="listbox", and aria-live="polite" for announcements
+- A debounce implementation (setTimeout with cleanup, or a custom useDebounce hook) applied to the search input onChange
+- An async fetch call for suggestions triggered after the debounce, with loading state management

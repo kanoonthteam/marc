@@ -1,0 +1,23 @@
+# Answer Guidelines: node-architecture
+
+## Must Cover
+- Use a layered architecture separating routes, services, repositories, and models (Routes -> Services -> Repositories -> Models)
+- Implement dependency injection to decouple services from their dependencies (constructor injection or DI container)
+- Validate all environment variables at startup using Zod schema parsing (z.object with envSchema.parse(process.env))
+- Build a custom error hierarchy extending a base ApplicationError class that distinguishes operational errors (isOperational: true) from programmer errors
+- Implement graceful shutdown handling SIGTERM and SIGINT signals, closing the HTTP server, database connections, Redis, and message queues before exiting
+- Wrap async route handlers with an asyncHandler utility to forward rejected promises to the error middleware
+- Structure the project using feature-based modules with co-located tests (e.g., routes/users/ containing handlers, schemas, and handler tests)
+- Implement a centralized error handler middleware that returns structured JSON error responses with appropriate HTTP status codes
+
+## Must NOT Do
+- Do not mix business logic directly inside route handlers — always delegate to a service layer
+- Do not hardcode configuration values (ports, secrets, database URLs) — use environment variables validated with Zod
+- Do not catch errors silently without logging — all errors must be logged with a structured logger like Pino
+- Do not skip graceful shutdown implementation — abrupt termination causes data loss during deployments
+
+## Code Examples Must Include
+- A Zod environment schema (z.object) parsing process.env with fields like NODE_ENV, PORT, DATABASE_URL, and JWT_SECRET
+- A custom error class hierarchy with ApplicationError base class containing statusCode and isOperational, plus specific subclasses like NotFoundError, ValidationError, and BadRequestError
+- An asyncHandler wrapper function that catches promise rejections and forwards them to Express next()
+- A gracefulShutdown function listening on process SIGTERM/SIGINT that sequentially closes server, database, and Redis connections

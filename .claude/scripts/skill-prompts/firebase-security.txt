@@ -1,0 +1,1 @@
+Write Firestore security rules for a multi-tenant app with user roles, data validation, and rate limiting patterns

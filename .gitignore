@@ -1,0 +1,24 @@
+# Compiled binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go build artifacts
+vendor/
+dist/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Build output binaries (built during development/verification)
+/marc
+/marc-server
+
+# Per-user Claude Code settings
+.claude/settings.local.json

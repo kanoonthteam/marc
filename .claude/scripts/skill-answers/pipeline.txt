@@ -1,0 +1,37 @@
+# Answer Guidelines: pipeline
+
+## Must Cover
+
+### Scenario 1: Phase Advance
+- Recognize that ALL implementation tasks (T001, T002, T003) have status "done"
+- State that the implementation phase is complete and the pipeline should advance
+- Update pipelinePhase from "implementation" to "integration" in tasks.json
+- Spawn the integration agent as the next step (not QA, not dev)
+- Describe what the integration agent will do: write E2E tests, update docs (CHANGELOG, README), check cross-feature integration
+- State that after integration completes, pipelinePhase advances to "verification" and QA agent is spawned
+
+### Scenario 2: Context Recovery
+- Read pipelinePhase from tasks.json to determine current state ("verification")
+- Recognize it is in the verification phase without needing prior conversation context
+- Spawn the QA agent to verify completed tasks against acceptance criteria
+- Inform the user about the resumed state (e.g., "Resuming pipeline from verification phase")
+
+### Scenario 3: Completion Exit
+- Check pipelinePhase and find it is "completed"
+- Stop orchestrating — do NOT treat this as a pipeline request
+- Respond to the user's question normally (about dark mode toggle) as regular Claude
+- Do NOT spawn any agents or create tasks.json entries for the new request unless the user invokes /pipeline
+
+## Must NOT Do
+- Must NOT skip the integration phase and go directly to QA/verification in Scenario 1
+- Must NOT spawn more dev agents when all tasks are already "done" in Scenario 1
+- Must NOT leave pipelinePhase as "implementation" when all tasks are complete in Scenario 1
+- Must NOT ask the user what to do next in Scenario 1 — auto-advance is automatic
+- Must NOT start a new pipeline or orchestrate agents in Scenario 3
+- Must NOT say "I don't know where I am" or ask the user to explain state in Scenario 2 — pipelinePhase tells you
+- Must NOT treat the dark mode request as a pipeline task in Scenario 3
+
+## Code Examples Must Include
+- A tasks.json snippet showing pipelinePhase updated to "integration" (Scenario 1)
+- Reference to spawning the integration agent by name (Scenario 1)
+- Reference to spawning the QA agent by name (Scenario 2)

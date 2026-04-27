@@ -1,0 +1,23 @@
+# Answer Guidelines: salesforce-testing
+
+## Must Cover
+- Use @TestSetup to create shared test data once for all test methods, calling TestDataFactory methods for consistent data creation
+- Include bulk testing with 200 records to validate trigger handlers are bulk-safe and do not hit governor limits
+- Use Test.startTest() and Test.stopTest() to reset governor limits and force asynchronous code (future, Queueable, Batch) to execute synchronously
+- Implement HttpCalloutMock to mock all external API callouts, testing both success (200) and failure (500, 408) response scenarios
+- Test with System.runAs() using different user profiles (e.g., Standard User, Admin) to verify sharing rules and field-level security enforcement
+- Include meaningful assertions with descriptive messages — System.assertEquals(expected, actual, 'message') — asserting specific field values, not just non-null checks
+- Cover positive, negative, and edge case scenarios: valid data, empty lists, null values, security exceptions, and boundary conditions
+- Use the Stub API (Test.createStub with System.StubProvider) for unit-testing service classes with mocked Selector dependencies
+
+## Must NOT Do
+- Must NOT use seeAllData=true — tests must create their own data via TestDataFactory and @TestSetup
+- Must NOT test with single records only — must include a bulk test with 200 records to prove bulkification
+- Must NOT hardcode record IDs (e.g., '001000000000001') in test data creation — must use inserted records and query for IDs
+- Must NOT omit Test.startTest()/Test.stopTest() when testing trigger handlers or async operations
+
+## Code Examples Must Include
+- A @TestSetup method calling TestDataFactory.createAccounts(200, true) to insert bulk test data shared across test methods
+- An HttpCalloutMock implementation class with configurable statusCode and responseBody, registered via Test.setMock(HttpCalloutMock.class, mockInstance)
+- A test method using System.runAs(testUser) to execute DML or service calls under a restricted profile and assert security behavior
+- A test method following Arrange-Act-Assert pattern with Test.startTest()/Test.stopTest() wrapping the Act phase and System.assertEquals assertions in the Assert phase

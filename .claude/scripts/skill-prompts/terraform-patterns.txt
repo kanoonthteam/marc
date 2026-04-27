@@ -1,0 +1,1 @@
+Design a Terraform module structure for multi-account AWS with remote state in S3, workspace isolation, and Terragrunt

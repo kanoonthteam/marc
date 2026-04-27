@@ -1,0 +1,23 @@
+# Answer Guidelines: react-testing
+
+## Must Cover
+- Use Vitest (describe, it, expect, vi) with React Testing Library (render, screen, waitFor) as the test framework
+- Query elements by role using screen.getByRole and screen.getByLabelText, not by test-id or container.querySelector
+- Use userEvent.setup() from @testing-library/user-event for realistic interaction simulation (click, type, tab), not fireEvent
+- Use MSW (Mock Service Worker) with http handlers and HttpResponse for API mocking instead of vi.mock on fetch/axios
+- Test each wizard step's validation by submitting with empty/invalid fields and asserting error messages appear
+- Test the async submission flow: fill all steps, submit, assert loading/pending state, then assert success or error state
+- Test error recovery: simulate API failure with server.use() override, verify error is shown, then test retry/recovery
+- Wrap components that use TanStack Query in a QueryClientProvider with retry: false for deterministic test behavior
+
+## Must NOT Do
+- Test implementation details like internal state values or component method calls
+- Use container.querySelector or getByTestId when semantic queries (getByRole, getByLabelText) are available
+- Use arbitrary timeouts or delays instead of waitFor for async assertions
+- Write snapshot tests for the multi-step form (complex, frequently changing component)
+
+## Code Examples Must Include
+- A test using screen.getByRole('button', { name: /next|submit/i }) and userEvent.setup() with await user.click()
+- An MSW handler setup with http.post and HttpResponse.json for the form submission endpoint
+- A test wrapper function that creates a QueryClient with retry: false and wraps the component in QueryClientProvider
+- A test using server.use() to override a handler for error simulation, followed by waitFor assertion on error message

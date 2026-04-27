@@ -1,0 +1,1 @@
+Write a bulkified Apex trigger handler for Account that enforces business rules, creates child records, and calls an external API

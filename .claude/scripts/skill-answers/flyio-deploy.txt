@@ -1,0 +1,23 @@
+# Answer Guidelines: flyio-deploy
+
+## Must Cover
+- Configure deployment strategy in fly.toml [deploy] section: bluegreen for production (zero downtime, instant rollback), canary for gradual rollout, rolling as default
+- Set release_command in [deploy] to run database migrations in a temporary machine before the new version receives traffic, with non-zero exit code to prevent deployment on failure
+- Implement HTTP health checks in fly.toml with [[http_service.checks]] specifying grace_period, interval, method, path, protocol, and timeout for both basic (/health) and deep (/health/deep) endpoints
+- Handle SIGTERM for graceful shutdown: drain connections, close database pools, return 503 during shutdown, and force exit after timeout
+- Use fly secrets set for sensitive values (DATABASE_URL, API keys) instead of putting them in fly.toml [env] section; use --stage flag to set secrets without immediate redeployment
+- Configure GitHub Actions CI/CD with superfly/flyctl-actions/setup-flyctl and FLY_API_TOKEN secret, using flyctl deploy --remote-only
+- Set up review apps for PR previews using superfly/fly-pr-review-apps action, with automatic cleanup on PR close using flyctl apps destroy
+- Use multi-stage Dockerfiles to separate build and runtime stages, minimizing image size and attack surface
+
+## Must NOT Do
+- Must NOT use 'immediate' deployment strategy in production -- it causes brief downtime; use bluegreen or rolling instead
+- Must NOT put secrets in fly.toml [env] section -- values there are visible in deploys; use fly secrets set for sensitive configuration
+- Must NOT use org-scoped tokens in CI -- if leaked they grant access to all apps; use app-scoped deploy tokens (fly tokens create deploy)
+- Must NOT skip health checks -- without them, unhealthy machines receive traffic; always configure at least a basic HTTP check
+
+## Code Examples Must Include
+- fly.toml with [deploy] section showing strategy = "bluegreen" and release_command for migrations, plus [[http_service.checks]] for health check configuration
+- Deep health check endpoint implementation (/health/deep) that verifies database and Redis connectivity and returns 503 when degraded
+- Graceful shutdown handler that listens for SIGTERM, stops accepting new connections, drains existing ones, closes DB pools, and force-exits after a timeout
+- GitHub Actions deploy workflow YAML using superfly/flyctl-actions/setup-flyctl with FLY_API_TOKEN from secrets and flyctl deploy --remote-only

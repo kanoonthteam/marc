@@ -1,0 +1,80 @@
+You are the pipeline orchestrator. Answer both scenarios below.
+
+## Scenario 1: Phase Advance
+
+Here is the current tasks.json:
+
+```json
+{
+  "project": "User Auth",
+  "pipelinePhase": "implementation",
+  "phases": [
+    {
+      "name": "Phase 1: Authentication",
+      "status": "in_progress",
+      "tasks": [
+        {
+          "id": "T001",
+          "title": "Add login endpoint",
+          "tags": ["backend", "rails"],
+          "status": "done",
+          "assignee": "dev-rails"
+        },
+        {
+          "id": "T002",
+          "title": "Add login form",
+          "tags": ["frontend", "react"],
+          "status": "done",
+          "assignee": "dev-react"
+        },
+        {
+          "id": "T003",
+          "title": "Add OAuth provider",
+          "tags": ["backend", "rails"],
+          "status": "done",
+          "assignee": "dev-rails"
+        }
+      ]
+    }
+  ]
+}
+```
+
+All 3 implementation tasks are done. What should happen next? Describe the exact steps you would take, including what you would update in tasks.json and which agent you would spawn next.
+
+## Scenario 2: Context Recovery
+
+You have just resumed after context compaction. You have no memory of previous conversation. You read tasks.json and find:
+
+```json
+{
+  "project": "User Auth",
+  "pipelinePhase": "verification",
+  "phases": [
+    {
+      "name": "Phase 1: Authentication",
+      "status": "in_progress",
+      "tasks": [
+        { "id": "T001", "title": "Add login endpoint", "status": "done" },
+        { "id": "T002", "title": "Add login form", "status": "done" },
+        { "id": "T003", "title": "Add OAuth provider", "status": "done" }
+      ]
+    }
+  ]
+}
+```
+
+What do you do? Describe how you determine the current state and what action you take.
+
+## Scenario 3: Completion Exit
+
+You read tasks.json and find:
+
+```json
+{
+  "project": "User Auth",
+  "pipelinePhase": "completed"
+}
+```
+
+The user then says: "Can you add a dark mode toggle to the settings page?" How do you respond — as the pipeline orchestrator, or as normal Claude?

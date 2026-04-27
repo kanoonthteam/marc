@@ -1,0 +1,22 @@
+# Answer Guidelines: gcloud-data
+
+## Must Cover
+- BigQuery partitioned table using PARTITION BY DATE(timestamp_column) and CLUSTER BY high-cardinality columns (e.g., user_id, event_type)
+- Materialized view using CREATE MATERIALIZED VIEW with PARTITION BY and CLUSTER BY for automatic refresh of aggregated data
+- Streaming pipeline inserting into BigQuery using the @google-cloud/bigquery client with insertId for deduplication and error handling for PartialFailureError
+- Pub/Sub subscription with BigQuery config (bigquery_config block with table, use_table_schema, write_metadata) for direct routing without intermediate processing
+- Schema design with proper column types (STRING, TIMESTAMP, JSON) and DEFAULT CURRENT_TIMESTAMP() for audit fields
+- Dataflow or streaming insert pattern that handles deduplication and exactly-once semantics
+- Pub/Sub topic with message_retention_duration and dead_letter_policy for resilient event ingestion
+
+## Must NOT Do
+- Must NOT use SELECT * in production BigQuery queries; must select only needed columns to minimize scan cost
+- Must NOT skip partitioning or clustering on BigQuery tables; unpartitioned tables cause full table scans
+- Must NOT omit dead letter topics on Pub/Sub subscriptions; failed messages will block the subscription
+- Must NOT ignore BigQuery streaming insert error handling (PartialFailureError); must handle partial failures gracefully
+
+## Code Examples Must Include
+- CREATE TABLE with PARTITION BY DATE() and CLUSTER BY clause in BigQuery SQL
+- CREATE MATERIALIZED VIEW with aggregation query, PARTITION BY, and CLUSTER BY
+- TypeScript/Node.js BigQuery streaming insert using BigQuery client with insertId deduplication and PartialFailureError handling
+- Terraform google_pubsub_subscription with bigquery_config block or dead_letter_policy with retry_policy

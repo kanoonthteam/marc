@@ -1,0 +1,23 @@
+# Answer Guidelines: code-review-practices
+
+## Must Cover
+- Security review checklist items: input validation (type, length, format), parameterized SQL queries (no string concatenation), XSS prevention via HTML escaping, no hardcoded credentials, JWT expiration checks, no secrets in logs or error messages
+- Performance review checklist items: N+1 query detection (with example of JOIN or batch loading fix), paginated large result sets, no unbounded collections, appropriate caching headers, timeouts for external service calls
+- SOLID principles as review criteria: Single Responsibility (class has one reason to change), Open-Closed (extend without modifying), Interface Segregation (no fat interfaces forcing unnecessary implementations), with concrete code examples of violations and fixes
+- Constructive feedback guidelines using comment prefixes: [blocking] for must-fix before merge, [suggestion] for recommended improvements, [question] for seeking understanding, [nit] for minor style issues, [praise] for positive acknowledgment
+- AI-generated code review checklist: verify imports/packages actually exist, confirm API method signatures are correct, check for hallucinated endpoints or configuration options, ensure tests would actually fail if implementation breaks
+- PR template structure including: description, type of change, related issues, test plan (unit/integration/manual), security checklist, and deployment notes
+- Review turnaround targets: first review within 4 hours, approval within 24 hours, PR size under 300 lines changed, with strategies like review-first culture and time-boxed sessions (30-60 minutes)
+- Review automation with GitHub Actions: CODEOWNERS for automatic reviewer assignment, PR size labeler (XS/S/M/L/XL with blocking on XL >500 lines), automated lint/test/security checks as required status checks
+
+## Must NOT Do
+- Must NOT recommend rubber-stamping (approving without reading) -- reviews must have substantive feedback
+- Must NOT allow bikeshedding (debating variable names while missing SQL injection) -- prioritize design and security over style
+- Must NOT use personal attacks or unconstructive language ("This is wrong/terrible") -- use "Consider..." or "What about..." patterns instead
+- Must NOT skip local testing for non-trivial changes -- pull the branch and verify behavior
+
+## Code Examples Must Include
+- N+1 query detection example showing the bad pattern (query in a loop) and the fix using either a JOIN query or batch loading with Map for lookups
+- SOLID violation and fix: at minimum SRP example showing a class doing too many things refactored into single-responsibility classes with dependency injection
+- PR review workflow YAML (GitHub Actions) showing lint, test with coverage report, and security scanning (pnpm audit, trivy) as CI checks on pull requests to main
+- Constructive review comment examples using the [blocking]/[suggestion]/[nit]/[praise] prefix format with specific, actionable feedback that explains "why"

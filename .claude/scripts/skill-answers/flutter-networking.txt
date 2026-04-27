@@ -1,0 +1,23 @@
+# Answer Guidelines: flutter-networking
+
+## Must Cover
+- Use a DioClient singleton pattern (static final _instance with private _internal constructor) as the single shared Dio instance across all services
+- Centralize all API calls in a single ApiService class that accepts an optional Dio parameter for testability: ApiService({Dio? dio})
+- Map DioException types to domain-specific exceptions (TimeoutException, NetworkException, BadRequestException, UnauthorizedException, etc.) in a single _handleError method
+- Implement Bearer token auth flow: set token on DioClient singleton headers (dio.options.headers['Authorization'] = 'Bearer $token'), persist to SecureStorageService, and validate on app start with a real API call
+- Use flutter_secure_storage with encryptedSharedPreferences on Android for token storage, returning Result<T> from all storage operations
+- Implement presigned URL image upload as a two-step flow: get presigned URL with authenticated Dio, then upload to S3 with a separate bare Dio instance (no auth headers)
+- Add interceptors (LogInterceptor) to the singleton Dio instance for request/response logging
+- Implement LRU caching with TTL for expensive API responses (e.g., DirectionsCacheService with 1-hour TTL, 50-entry max, coordinate rounding to 5 decimal places)
+
+## Must NOT Do
+- Must NOT create a new Dio instance per request or per service instead of using the DioClient singleton
+- Must NOT store tokens in SharedPreferences (must use flutter_secure_storage with encryption)
+- Must NOT upload to S3 presigned URLs using the authenticated Dio instance (extra auth headers will cause failure)
+- Must NOT throw raw DioException to callers; must map to domain-specific exception classes
+
+## Code Examples Must Include
+- A DioClient singleton class with static final _instance, private _internal constructor, and BaseOptions configuration (baseUrl, timeouts, headers)
+- A _handleError method that switches on DioExceptionType and maps to domain exceptions (connectionTimeout, badResponse with status code switching, etc.)
+- SecureStorageService methods that return Result<T> (Success/Failure) instead of throwing
+- Presigned URL upload flow showing two Dio instances: the authenticated singleton for getting the URL, and a new bare Dio() for the S3 PUT

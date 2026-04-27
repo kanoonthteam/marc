@@ -1,0 +1,1 @@
+Write widget and integration tests for a checkout flow with form validation, payment processing, and order confirmation

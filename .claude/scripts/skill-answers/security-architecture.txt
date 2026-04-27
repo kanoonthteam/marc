@@ -1,0 +1,23 @@
+# Answer Guidelines: security-architecture
+
+## Must Cover
+- Zero-trust core tenets applied: never trust always verify, least privilege, and assume breach with concrete controls for a fintech application
+- Defense-in-depth with at least 4 of the 5 layers: Perimeter (WAF, DDoS, rate limiting), Network (VPC, micro-segmentation, mTLS), Application (OAuth2/OIDC, RBAC/ABAC, input validation), Data (AES-256 at rest, TLS 1.3 in transit, column-level encryption for PII), Monitoring (audit logging, SIEM, IDS)
+- OAuth2 Authorization Code + PKCE flow for user-facing clients and Client Credentials flow for service-to-service communication with JWT best practices (RS256 asymmetric signing, short-lived tokens, scope-based authorization)
+- STRIDE threat model for at least one critical flow (e.g., authentication or payment) covering all six categories: Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege with specific mitigations
+- Encryption strategy covering at rest (AES-256-GCM), in transit (TLS 1.3), and key management (KMS, envelope encryption, key rotation every 90 days, separate keys per environment)
+- Compliance framework mapping for fintech (SOC 2, GDPR, or PCI-DSS) linking requirements to technical controls like access control, encryption, audit logging, breach notification, and data retention
+- Secrets management architecture using a vault (HashiCorp Vault, AWS Secrets Manager) with rules: secrets never in code/Git, automatic rotation, audit of access, separate secrets per environment
+- Service-to-service authentication using mTLS or JWT with identity verification at every hop, not relying on network location
+
+## Must NOT Do
+- Use symmetric JWT signing (HS256) in a distributed system instead of asymmetric (RS256/ES256) which allows verification without sharing the signing secret
+- Recommend security through obscurity (e.g., hiding endpoints, non-standard ports) as a security control
+- Store secrets directly in environment variables without a secrets manager/vault, since env vars can leak via logs and crash dumps
+- Suggest rolling custom cryptographic implementations instead of established libraries (node:crypto, libsodium, AWS KMS)
+
+## Code Examples Must Include
+- A STRIDE threat model table for a fintech-relevant flow (e.g., authentication or payment) with columns for Threat, Target, Impact, and Mitigation covering all six STRIDE categories
+- OAuth2/OIDC token validation middleware using JWKS endpoint, RS256 algorithm, and scope-based authorization checks (e.g., using express-jwt and jwks-rsa)
+- A zero-trust architecture diagram showing the control plane (Identity Provider, Policy Engine, Continuous Monitoring) and data plane with mTLS between services and encryption at the data layer
+- A compliance requirements mapping table linking security controls (access control, encryption, audit logging, breach notification) to specific framework criteria (SOC 2 CC references, GDPR Articles, or PCI-DSS requirements)

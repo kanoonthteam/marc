@@ -1,0 +1,1 @@
+Design sprint planning and velocity tracking for a 3-team program with cross-team dependencies and shared components

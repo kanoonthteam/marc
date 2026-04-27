@@ -1,0 +1,23 @@
+# Answer Guidelines: requirements-elicitation
+
+## Must Cover
+- Workshop structure using JAD (Joint Application Design) format with agenda, time blocks, participants (clinicians, IT, compliance officers, patients), facilitator, ground rules, and defined outputs per activity
+- Stakeholder interview plan covering diverse roles (doctors, nurses, patients, administrators, IT staff, compliance/legal) — not just managers representing users
+- Regulatory compliance as a constraint category: identify HIPAA, FDA, or other healthcare regulations and capture them as non-functional requirements early in the discovery process
+- Prioritization framework (MoSCoW or Kano Model) applied to patient portal features — distinguishing must-haves (e.g., secure login, audit trails) from delighters (e.g., AI health tips)
+- User story mapping with a walking skeleton/MVP slice: backbone of patient activities (e.g., View Records, Book Appointment, Message Provider, View Test Results) broken into release increments
+- Empathy mapping or Design Thinking phases (Empathize, Define, Ideate) to uncover implicit patient needs and accessibility concerns beyond stated requirements
+- Requirements traceability matrix (RTM) linking each requirement to its source (interview, regulation, workshop), priority, and acceptance criteria using Given/When/Then format
+- Non-functional requirements checklist: performance (page load times), security (encryption, access control), reliability (uptime SLA), usability (WCAG accessibility), and scalability
+
+## Must NOT Do
+- Must NOT present solutions as requirements — e.g., "use a dropdown for selecting doctors" instead of "patient needs to select a healthcare provider"
+- Must NOT skip non-functional requirements — healthcare portals require explicit performance, security, and compliance constraints from the start
+- Must NOT rely on a single elicitation technique — must combine interviews, workshops, observation, and document analysis
+- Must NOT treat all requirements as "Must Have" — must apply a prioritization framework to manage scope
+
+## Code Examples Must Include
+- Structured interview guide template with sections for current state, desired state, constraints (regulatory), and priority ranking — tailored to healthcare stakeholders
+- JAD session agenda with time-boxed activities: current process walkthrough, pain point identification (sticky notes/dot voting), user story writing in groups, and story review
+- User story map showing patient portal activities as backbone (e.g., Browse Health Records, Schedule Appointments, Communicate with Provider, Manage Prescriptions) with features arranged vertically by release priority
+- Requirements specification entry with ID, description, source, priority (MoSCoW), and acceptance criteria in Given/When/Then format for a healthcare-specific requirement (e.g., "Given a patient is authenticated, when they request medical records, then the system displays records within 2 seconds and logs the access for HIPAA audit")

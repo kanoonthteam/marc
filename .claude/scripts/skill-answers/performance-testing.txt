@@ -1,0 +1,23 @@
+# Answer Guidelines: performance-testing
+
+## Must Cover
+- Load test with ramping stages: ramp up to target VUs, hold at steady state, ramp down — using k6 stages array with duration and target
+- Threshold definitions for SLA validation: http_req_duration p(95)<200 (per the prompt's 200ms requirement), http_req_failed rate<0.01, http_reqs rate>1000 (per the prompt's 1000 RPS requirement)
+- Multiple test types: load test (normal traffic), stress test (find breaking point with escalating stages), spike test (sudden traffic surge), soak test (extended duration for memory leaks)
+- Realistic user simulation using k6 scenarios: multiple named scenarios with different executors (ramping-vus), traffic distribution (70% browsing, 20% searching, 10% purchasing), and per-scenario thresholds
+- Custom metrics: Counter, Gauge, Rate, Trend from k6/metrics for business-specific measurements (order_success_rate, api_latency)
+- check() function for response validation: verify status codes, response body content, and response time within each VU iteration
+- Think time with sleep(): use realistic random think time like sleep(Math.random() * 3 + 1) between requests, not zero delay
+- CI integration: GitHub Actions workflow with k6 installation, --out json=results.json output, artifact upload, and PR comment with results
+
+## Must NOT Do
+- Must NOT omit think time (sleep) between requests — zero-delay hammering does not reflect real user traffic patterns
+- Must NOT use averages for response time analysis — always use percentiles (p50, p95, p99) because averages hide outliers
+- Must NOT ignore ramp-up — sudden max load does not reflect real traffic; use graduated stages
+- Must NOT test without a baseline — regression detection requires comparing against known-good performance numbers
+
+## Code Examples Must Include
+- k6 load test script with options.stages array ramping to high VU count, options.thresholds with http_req_duration p(95)<200 and http_reqs rate>1000, and default function with http.get, check, and sleep
+- Stress test script with escalating stages (normal -> beyond normal -> breaking point -> recovery ramp down) and more lenient thresholds (p(99)<2000, rate<0.05)
+- k6 scenarios configuration with multiple named scenarios (browsing, api_calls) using ramping-vus executor, separate exec functions, and per-scenario thresholds using {scenario:name} tag syntax
+- Custom metrics: new Rate('success_rate'), new Trend('api_latency', true) with threshold validation (success_rate: ['rate>0.95'], api_latency: ['p(95)<200'])

@@ -1,0 +1,1 @@
+Design a dashboard with React 19 Server Components explaining client/server boundaries and data fetching patterns

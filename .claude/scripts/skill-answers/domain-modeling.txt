@@ -1,0 +1,23 @@
+# Answer Guidelines: domain-modeling
+
+## Must Cover
+- Identify distinct bounded contexts for the marketplace (e.g., Catalog Context, Order Context, Payment Context, Shipping Context, Seller Context, Buyer Context) where the same term can mean different things in different contexts
+- Define context mapping relationships between bounded contexts using specific patterns: Customer-Supplier, Anti-Corruption Layer (ACL), Published Language, Partnership, Shared Kernel, or Open Host Service
+- Design aggregates with proper aggregate roots (e.g., Order as aggregate root containing OrderItems) that enforce the rule: one aggregate = one transaction, reference other aggregates by ID only
+- Define value objects (immutable, compared by value) for domain concepts like Money, Address, Email, ProductRef -- favoring value objects over primitives
+- Build a ubiquitous language glossary for each bounded context with Term, Definition, and "NOT to be confused with" columns
+- Produce an event storming output showing domain events (orange), commands (blue), actors (yellow), read models (green), and policies (lilac) in a timeline flow
+- Model entity relationships with cardinality (1:1, 1:N, N:M) including junction tables for many-to-many relationships
+- Include domain patterns relevant to the marketplace: state machine for order lifecycle, RBAC for seller/buyer permissions, and multi-tenancy for seller isolation
+
+## Must NOT Do
+- Create an anemic domain model where entities are just data holders with getters/setters and all logic lives in services
+- Use a shared database across bounded contexts, which creates tight coupling and prevents independent evolution
+- Build a "god aggregate" that owns everything -- aggregates must be small with few entities to reduce contention
+- Skip the ubiquitous language and use technical jargon (e.g., "softDelete" instead of "archive", "createJunction" instead of "addToCollection")
+
+## Code Examples Must Include
+- An aggregate root class (e.g., Order) with private state, invariant enforcement (e.g., "Cannot add items to a non-draft order"), and domain event emission
+- A value object class (e.g., Money) with immutability (readonly fields), value equality (equals method), and self-validation (e.g., "Amount cannot be negative")
+- An Anti-Corruption Layer (ACL) translator class that converts between an external system's model and the domain model (e.g., PaymentTranslator.fromStripe)
+- A state machine with valid state transitions defined as a Record mapping (e.g., ACTIVE -> [ARCHIVED, DELETED]) and a transition function that throws DomainError on invalid transitions

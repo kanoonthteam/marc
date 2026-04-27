@@ -1,0 +1,1 @@
+Design a RESTful API controller for a multi-tenant SaaS app with before_action authorization, strong params, and proper error handling

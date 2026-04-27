@@ -1,0 +1,1 @@
+Design a zero-trust security architecture for a fintech application with OAuth2/OIDC, encryption, and compliance requirements

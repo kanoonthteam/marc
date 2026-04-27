@@ -1,0 +1,1 @@
+Design a Git branching strategy for a team of 12 developers with feature branches, release trains, hotfix process, and PR review requirements

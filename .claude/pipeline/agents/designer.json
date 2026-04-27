@@ -1,0 +1,9 @@
+{
+  "agent": "designer-agent",
+  "role": "designer",
+  "count": 1,
+  "model": "sonnet",
+  "skills": ["ui-wireframing"],
+  "mcp": {},
+  "taskFilter": {}
+}

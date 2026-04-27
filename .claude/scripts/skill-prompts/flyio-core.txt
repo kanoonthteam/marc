@@ -1,0 +1,1 @@
+Configure a Fly.io app with multi-region deployment, persistent volumes, and internal DNS for service discovery

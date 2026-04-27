@@ -1,0 +1,23 @@
+# Answer Guidelines: agile-frameworks
+
+## Must Cover
+- Design sprint planning with capacity calculation: available days per team, focus factor (typically 0.75 for meetings/support overhead), and resulting sprint capacity in story points based on rolling velocity average
+- Include velocity tracking with a sprint history table showing Committed vs Completed points and rolling average (last 3 sprints) to forecast realistic capacity per team
+- Address cross-team dependency management using a scaling framework comparison (SAFe PI Planning, LeSS, or Nexus) appropriate for a 3-team program with shared components
+- Define WIP limits for the Kanban flow across teams and track flow metrics: Lead Time, Cycle Time, Throughput, WIP, and Block Time
+- Provide Definition of Ready (DoR) and Definition of Done (DoD) checklists that are shared across all 3 teams to ensure consistent quality
+- Include a retrospective format (Start/Stop/Continue, 4Ls, or Sailboat) with a maximum of 3 action items per retro, each with owner and due date
+- Use estimation techniques: Planning Poker with Fibonacci scale (1, 2, 3, 5, 8, 13) for sprint-level work, and T-shirt sizing (XS-XL) for roadmap-level planning
+- Address shared component ownership with explicit strategies: who refines shared backlog items, how cross-team dependencies are tracked, and how integration conflicts are resolved
+
+## Must NOT Do
+- Use velocity as a performance metric to compare teams or punish teams for not completing everything -- velocity measures capacity, not productivity
+- Skip WIP limits -- a Kanban board without WIP limits is just a task board, not Kanban
+- Plan at 100% utilization -- leave slack for innovation, learning, unexpected work, and cross-team coordination overhead
+- Skip retrospectives because "we're too busy" -- this is the anti-pattern the SKILL.md explicitly warns against
+
+## Code Examples Must Include
+- A sprint capacity calculation table showing developer availability (days off), focus factor application, and resulting capacity in ideal days and story points
+- A velocity tracking table with Sprint number, Committed points, Completed points, Velocity columns for at least 5 sprints, plus rolling average and recommended commitment range
+- A Kanban board diagram with columns (Backlog, To Do, In Progress, Review, Done) showing WIP limits in parentheses (e.g., "In Progress (4)")
+- A RACI-style or dependency matrix showing which team owns each shared component and how cross-team work items flow through refinement, planning, and review

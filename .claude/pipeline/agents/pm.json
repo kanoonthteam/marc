@@ -1,0 +1,9 @@
+{
+  "agent": "pm-agent",
+  "role": "pm",
+  "count": 1,
+  "model": "sonnet",
+  "skills": ["task-planning", "task-estimation", "agile-frameworks", "stakeholder-communication"],
+  "mcp": {},
+  "taskFilter": {}
+}

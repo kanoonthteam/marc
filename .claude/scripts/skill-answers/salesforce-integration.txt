@@ -1,0 +1,22 @@
+# Answer Guidelines: salesforce-integration
+
+## Must Cover
+- Use Named Credentials (callout:Named_Credential/path) for all external endpoints — never hardcode URLs or authentication tokens in Apex
+- Implement retry logic with a configurable retry count, using Queueable chaining or a recursive approach for transient HTTP failures (e.g., 500, 503, 408)
+- Implement a circuit breaker pattern that tracks consecutive failures (via Custom Metadata, Custom Setting, or a static counter) and stops callouts when a failure threshold is reached
+- Publish Platform Events (e.g., ERP_Sync__e) using EventBus.publish() to decouple the integration trigger from the processing logic
+- Include proper HTTP error handling: check response status codes, parse error bodies, and log failures to a custom Error_Log__c or similar object
+- Use with sharing by default and WITH USER_MODE in SOQL queries for security; use Security.stripInaccessible() when processing user input
+- Design for idempotency by including unique transaction/correlation IDs in outbound requests to prevent duplicate processing in the ERP
+
+## Must NOT Do
+- Must NOT hardcode endpoint URLs, API keys, or credentials in Apex code — must use Named Credentials or Custom Metadata
+- Must NOT ignore HTTP error responses — must check getStatusCode() and handle non-200 responses with logging or retry
+- Must NOT make callouts synchronously inside trigger context — must use @future(callout=true), Queueable, or Platform Events to move callouts to async context
+- Must NOT omit the circuit breaker open/closed state check before attempting callouts
+
+## Code Examples Must Include
+- An HttpRequest using callout:Named_Credential syntax (e.g., req.setEndpoint('callout:ERP_System/api/v1/orders'))
+- A retry mechanism showing a loop or Queueable re-enqueue with a decrementing retry counter and status code check
+- A Platform Event publish call using EventBus.publish() with a list of custom event records and Database.SaveResult handling
+- A circuit breaker state check (e.g., reading a Custom Metadata threshold and comparing against a failure counter) before executing the callout

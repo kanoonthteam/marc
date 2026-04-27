@@ -1,0 +1,23 @@
+# Answer Guidelines: rails-testing
+
+## Must Cover
+- Write RSpec request specs (`type: :request`) with proper HTTP verbs (`get`, `post`, `put`, `delete`) targeting API endpoints with JSON headers and authentication headers
+- Use FactoryBot with `create`, `build`, and traits (e.g., `create(:user, :admin)`) for test data setup, keeping factories minimal with only required attributes
+- Test authentication by verifying unauthenticated requests return `:unauthorized` (401) status, using shared examples like `it_behaves_like "requires authentication"`
+- Test validation error responses by sending invalid params and asserting `:unprocessable_entity` (422) status with error messages in the JSON body
+- Test the happy path for payment creation with valid params, asserting `:created` (201) status and verifying the record count changes with `change(Model, :count).by(1)`
+- Handle Stripe webhook testing by sending POST requests with a webhook payload and verifying the correct side effects (e.g., updating payment status, enqueuing jobs)
+- Use `have_http_status` matchers and parse response with `JSON.parse(response.body)` to assert on response structure and content
+- Include both success and error/edge case contexts using `context "with valid params"` and `context "with invalid params"` blocks
+
+## Must NOT Do
+- Must NOT test implementation details like expecting specific method calls (e.g., `expect(user).to receive(:save)`); test behavior and outcomes instead
+- Must NOT use shared mutable state between tests; each test must be independent using `let` and `let!`
+- Must NOT skip testing error paths and edge cases (unauthorized, not found, validation errors)
+- Must NOT create overly complex factories with many associations by default (use traits and transient attributes instead)
+
+## Code Examples Must Include
+- A request spec with `RSpec.describe "Api::V1::Payments", type: :request` containing `describe "POST /api/v1/payments"` blocks
+- FactoryBot usage with `let(:user) { create(:user) }` and authentication headers setup (e.g., `let(:auth_headers) { { "Authorization" => "Bearer #{user.token}" } }`)
+- An assertion using `expect { post "/api/v1/payments", params: valid_params.to_json, headers: headers }.to change(Payment, :count).by(1)`
+- A webhook test that posts a Stripe event payload and asserts on the resulting state change or job enqueue (e.g., `have_enqueued_job` or status update verification)

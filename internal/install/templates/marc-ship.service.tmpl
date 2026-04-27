@@ -1,0 +1,15 @@
+[Unit]
+Description=marc ship daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{.BinaryPath}} ship --config {{.ConfigPath}}
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

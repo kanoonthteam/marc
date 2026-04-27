@@ -1,0 +1,23 @@
+# Answer Guidelines: aws-operations
+
+## Must Cover
+- Create CloudWatch dashboards with key ECS metrics: CPUUtilization, MemoryUtilization, RunningTaskCount, and service health
+- Define CloudWatch composite alarms that combine multiple metric alarms (e.g., high CPU AND high memory) to reduce alert noise
+- Configure CloudWatch alarms with actionable thresholds for ECS service metrics using aws-cloudwatch Alarm constructs
+- Set up automated remediation using Systems Manager (SSM) Automation runbooks triggered by CloudWatch alarm actions
+- Enable Container Insights on the ECS cluster (containerInsights: true) for detailed task-level and service-level monitoring
+- Use CloudWatch Logs Insights with QueryDefinition to define reusable queries for ECS application logs
+- Configure SNS topics as alarm action targets for notifications alongside SSM automation for remediation
+- Enable X-Ray tracing (tracing: lambda.Tracing.ACTIVE) on supporting Lambda functions for distributed tracing across the architecture
+
+## Must NOT Do
+- Create alarms without actionable responses -- every alarm must trigger either a notification or an automated remediation
+- Skip Container Insights on ECS clusters -- it provides essential per-task and per-service metrics
+- Use ClickOps to configure dashboards or alarms -- all monitoring infrastructure must be defined as IaC via CDK
+- Ignore composite alarms and rely only on individual metric alarms -- composite alarms reduce false positives
+
+## Code Examples Must Include
+- new cloudwatch.Dashboard with addWidgets() using GraphWidget or SingleValueWidget for ECS cluster metrics
+- new cloudwatch.CompositeAlarm combining multiple cloudwatch.Alarm instances with alarmRule (allOf/anyOf)
+- CloudWatch alarm with alarmAction targeting an SNS topic or SSM Automation document ARN
+- ECS cluster with containerInsights: true and log group configuration with retention policy

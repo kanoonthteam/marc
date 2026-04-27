@@ -1,0 +1,23 @@
+# Answer Guidelines: testing-strategies
+
+## Must Cover
+- Consumer-Driven Contract (CDC) flow: consumer defines expected interactions, generates Pact file, publishes to Pact Broker, provider replays and verifies
+- PactV4 consumer-side test structure: addInteraction().given(state).uponReceiving(description).withRequest().willRespondWith().executeTest() pattern
+- Provider-side Verifier configuration with providerBaseUrl, pactBrokerUrl, stateHandlers, and publishVerificationResult for CI
+- State handlers in provider verification: functions that set up required data (e.g., "a bookmark with ID bk_123 exists") before replaying interactions
+- When to use contract testing: microservice boundaries between teams, frontend/backend split, preventing breaking API changes, when E2E is too slow/flaky
+- Selector priority for E2E: getByRole > getByLabel > getByText > getByTestId > CSS/XPath selectors
+- Page Object Model pattern: encapsulate page locators and interactions in a class (LoginPage with navigate, fillEmail, submit methods)
+- Flaky test management: quarantine with test.fixme, identify root causes (timing, shared state, network), use proper waits instead of sleep
+
+## Must NOT Do
+- Must NOT mock the database when testcontainers could provide a real PostgreSQL/Redis instance for integration testing
+- Must NOT snapshot test everything — snapshots become noise that developers blindly update without reviewing
+- Must NOT leave flaky tests running — quarantine immediately with test.fixme and a tracking ticket
+- Must NOT skip integration tests and rely only on unit + E2E — the testing pyramid requires the integration layer
+
+## Code Examples Must Include
+- PactV4 consumer test: new PactV4({ consumer, provider }) with addInteraction chain defining GET request, expected 200 response with JSON body, and executeTest with client verification
+- Pact Verifier provider test: new Verifier({ providerBaseUrl, pactBrokerUrl, provider, stateHandlers }) with verifyProvider() call
+- Page Object Model class with constructor accepting Page, defining Locator fields (getByLabel, getByRole), and methods like login(email, password)
+- data-testid usage as fallback selector: page.getByTestId('submit-bookmark') only when role-based selectors are not suitable

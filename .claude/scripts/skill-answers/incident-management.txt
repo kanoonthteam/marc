@@ -1,0 +1,23 @@
+# Answer Guidelines: incident-management
+
+## Must Cover
+- Severity level definitions (SEV1 through SEV4) with response times, descriptions, and communication requirements (e.g., SEV1: < 5 minutes response, page on-call + exec notification)
+- Escalation matrix defining incident command roles: Incident Commander (IC), Communications Lead, Subject Matter Expert (SME), and optionally Scribe, with clear responsibilities for each
+- The incident response lifecycle: Detection -> Triage -> Mitigation -> Resolution, with emphasis on separating mitigation (stop the bleeding) from root cause analysis
+- Communication templates for status page updates covering all four phases: Investigating, Identified, Monitoring, Resolved, with timestamp, impact description, current actions, and next update time
+- Blameless postmortem format including: Summary, Impact (duration, users affected, revenue, SLO impact), Timeline (UTC), Root Cause Analysis with 5 Whys, Contributing Factors, What Went Well, What Went Poorly, and Action Items with owner/due date/status
+- SLO and error budget framework with concrete examples (e.g., 99.95% availability = 21.6 minutes/month error budget) and error budget policy tiers (>50%, 25-50%, 10-25%, <10%)
+- Mitigation decision tree: check recent deployment -> rollback or feature flag -> check dependency -> circuit breaker/fallback -> scale up/restart/failover
+- Blameless postmortem ground rules: examine what happened not who is at fault, focus on systemic improvements, action items must have clear owners and deadlines
+
+## Must NOT Do
+- Foster blame culture -- postmortems must focus on systemic improvements, not individual fault; use "the system allowed X" instead of "person Y did X"
+- Create postmortems without actionable follow-up items that have assigned owners and due dates
+- Skip severity level definitions or treat all incidents with the same urgency
+- Recommend manual-only runbooks without automation for common mitigations (rollback, circuit breakers, feature flags)
+
+## Code Examples Must Include
+- A severity level table or matrix defining SEV1-SEV4 with response time SLAs, impact descriptions, and communication channels
+- A blameless postmortem template with sections for Summary, Impact, Timeline, Root Cause Analysis (including 5 Whys), Contributing Factors, What Went Well/Poorly, and Action Items table with Priority/Action/Owner/Due Date/Status columns
+- Status page communication templates showing the four incident phases (Investigating, Identified, Monitoring, Resolved) with example update text
+- An SLO definition in YAML format with `sli`, `objective`, `window`, and `error_budget` fields, plus an error budget policy with tiered responses based on remaining budget percentage

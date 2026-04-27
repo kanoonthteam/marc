@@ -1,0 +1,40 @@
+# [Project Name]
+
+## Overview
+[Brief description of your project]
+
+## Commands
+- Package manager: `pnpm` (or npm, yarn, bundle, etc.)
+- Test: `pnpm test`
+- Lint: `pnpm lint`
+- Build: `pnpm build`
+
+## Stack
+- **Backend**: [Rails / Node.js / Odoo / Salesforce]
+- **Frontend**: [React / Flutter / Vanilla]
+- **Database**: [PostgreSQL / MySQL / Firestore / DynamoDB]
+- **Hosting**: [Fly.io / AWS / Azure / GCP / Firebase]
+
+## Architecture
+[Brief description of your app architecture — monolith, microservices, serverless, etc.]
+
+## Pipeline Configuration
+
+This project uses claude-squad for AI-assisted development.
+
+### Active Agents
+Remove unused agents from `.claude/pipeline/agents/` to keep only what you need.
+
+### Domain Context
+Edit `.claude/agents/ba-agent.md` "Domain Context" section to add your business domain expertise.
+
+### Running the Pipeline
+```
+/pipeline <feature description>
+/pipeline-status
+```
+
+## Project Conventions
+- [Convention 1: e.g., "Use service objects for business logic"]
+- [Convention 2: e.g., "All API responses follow the format in api-conventions skill"]
+- [Convention 3: e.g., "Write tests for every new endpoint"]

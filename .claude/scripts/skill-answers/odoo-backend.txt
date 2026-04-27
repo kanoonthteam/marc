@@ -1,0 +1,22 @@
+# Answer Guidelines: odoo-backend
+
+## Must Cover
+- JSON-RPC controller using `@http.route` with `type='json'`, `auth='user'`, and `request.env` to access models, returning a structured dict response
+- HTTP controller endpoint with `type='http'`, `auth='public'`, `csrf=False`, using `request.make_response()` with JSON serialization and proper Content-Type headers
+- Scheduled action (cron) defined in XML as `ir.cron` record with `model_id`, `code`, `interval_number`, `interval_type`, `numbercall=-1`, and batch processing with `self.env.cr.commit()` per batch
+- Email template integration via automated action (`base.automation`) with `trigger="on_write"`, `filter_domain`, `filter_pre_domain` for state-change detection, and `template_id` reference
+- Security setup: `ir.model.access.csv` with user/manager permission rows, security groups in XML with `implied_ids` for group hierarchy, and record rules wrapped in `<data noupdate="1">`
+- Multi-company pattern with `_check_company_auto = True`, `company_id` field with `default=lambda self: self.env.company`, and `check_company=True` on relational fields
+- Proper `sudo()` usage: only when necessary (e.g., accessing `ir.config_parameter`), with clear comments documenting why the security bypass is needed, and limited scope
+
+## Must NOT Do
+- Must NOT use `sudo()` without documenting the reason for the security bypass
+- Must NOT implement cron jobs that process all records at once without batch processing and `cr.commit()` per batch (causes memory issues on large datasets)
+- Must NOT omit `noupdate="1"` on record rules data blocks (rules get overwritten on module update)
+- Must NOT hardcode company IDs or user IDs instead of using `self.env.company` and `self.env.user`
+
+## Code Examples Must Include
+- A `@http.route('/api/...', type='json', auth='user')` controller method that uses `request.env['model'].search_read()` and returns a dict
+- An `ir.cron` XML record with `<field name="code">model.method_name()</field>` and interval configuration fields
+- A `base.automation` XML record with `trigger`, `filter_domain`, `filter_pre_domain`, and `state` fields for email-on-state-change
+- A Python cron method decorated with `@api.model` that processes records in a while loop with `limit=batch_size`, `offset`, and `self.env.cr.commit()` per batch
