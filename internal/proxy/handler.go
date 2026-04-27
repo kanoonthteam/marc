@@ -68,6 +68,12 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			upReq.Header.Add(k, v)
 		}
 	}
+	// Strip Accept-Encoding so the upstream returns uncompressed SSE.
+	// We need to read the SSE stream as plain text to aggregate it into the
+	// JSONL event's response field; with gzip enabled, the proxy would have
+	// to inflate before scanning, and the saved bytes would be opaque to the
+	// downstream denoise step. Bandwidth cost is negligible for our scale.
+	upReq.Header.Del("Accept-Encoding")
 	// Log headers at debug level with sensitive values redacted.
 	slog.Debug("proxy: forwarding request",
 		slog.String("method", r.Method),
@@ -111,7 +117,21 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if isSSE {
 		res := streamSSE(w, resp.Body, requestSent)
-		responseBody = res.rawBody
+		// Reconstruct the non-streaming-shaped response JSON object from the
+		// raw SSE event stream so downstream (denoise / generate) can read
+		// assistant text uniformly. Falls back to the raw bytes (which fail
+		// json.Valid and produce response: null) when the stream is malformed.
+		if agg := aggregateSSE(res.rawBody); len(agg) > 0 {
+			responseBody = agg
+		} else {
+			responseBody = res.rawBody
+			slog.Warn("proxy: SSE aggregation produced empty result; response will be null",
+				slog.Int("raw_body_bytes", len(res.rawBody)),
+				slog.Int("chunk_count", res.chunkCount),
+				slog.Bool("saw_stop", res.sawStop),
+				slog.String("first_500", string(res.rawBody[:min(500, len(res.rawBody))])),
+			)
+		}
 		streamMeta = &jsonl.StreamMeta{
 			WasStreamed:  true,
 			FirstChunkMs: res.firstChunkMs,

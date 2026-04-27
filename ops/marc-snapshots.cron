@@ -1,0 +1,15 @@
+# marc — weekly ZFS snapshot of all marc datasets
+#
+# Install with:
+#     sudo cp ops/marc-snapshots.cron /etc/cron.d/marc-snapshots
+#     sudo chmod 0644 /etc/cron.d/marc-snapshots
+#
+# The recursive snapshot (`-r`) captures all child datasets atomically — so
+# ClickHouse and SQLite state are point-in-time consistent with each other.
+# Snapshot names embed the date so they sort lexicographically; no pruning is
+# performed. At marc's scale (~10 GB/year of weekly deltas) the overhead is
+# negligible.
+#
+# Schedule: Sunday 03:00 local time.
+# Field order: minute hour day-of-month month day-of-week user command
+0 3 * * 0  root  /usr/sbin/zfs snapshot -r marc-data@weekly-$(date +\%Y\%m\%d)

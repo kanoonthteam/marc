@@ -28,9 +28,27 @@ Examples:
   marc install              # install and start services
   marc install --dry-run    # print unit file contents without writing
   marc install --uninstall  # stop and remove all installed units`,
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		uninstall, _ := cmd.Flags().GetBool("uninstall")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		targetDir, _ := cmd.Flags().GetString("target-dir")
+		userMode, _ := cmd.Flags().GetBool("user")
+		skipLoad, _ := cmd.Flags().GetBool("skip-load")
+
+		// --user is a convenience: maps to ~/.config/systemd/user/ and skips
+		// the systemctl invocation by default (the operator runs systemctl
+		// --user enable --now afterwards). Override with --target-dir.
+		if userMode && targetDir == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("install --user: resolve home dir: %w", err)
+			}
+			targetDir = filepath.Join(home, ".config", "systemd", "user")
+			if !cmd.Flags().Changed("skip-load") {
+				skipLoad = true
+			}
+		}
 
 		// Resolve the binary path: real path of the running executable.
 		binaryPath, err := os.Executable()
@@ -47,15 +65,13 @@ Examples:
 			ConfigPath: cfgPath,
 			Uninstall:  uninstall,
 			DryRun:     dryRun,
+			TargetDir:  targetDir,
+			SkipLoad:   skipLoad,
 			Stdout:     cmd.OutOrStdout(),
 			Stderr:     cmd.ErrOrStderr(),
 		}
 
-		if err := install.Run(cmd.Context(), opts); err != nil {
-			fmt.Fprintln(cmd.ErrOrStderr(), "Error:", err)
-			return err
-		}
-		return nil
+		return install.Run(cmd.Context(), opts)
 	},
 }
 
@@ -69,5 +85,20 @@ func init() {
 		"dry-run",
 		false,
 		"print the unit file contents without writing or starting anything",
+	)
+	installCmd.Flags().String(
+		"target-dir",
+		"",
+		"override the systemd unit directory (default: /etc/systemd/system on Linux)",
+	)
+	installCmd.Flags().Bool(
+		"user",
+		false,
+		"install under ~/.config/systemd/user/ (no sudo); operator runs `systemctl --user enable --now marc-proxy.service marc-ship.service` afterwards",
+	)
+	installCmd.Flags().Bool(
+		"skip-load",
+		false,
+		"write unit files but do not run systemctl daemon-reload/enable/start (used by --user, where the dbus path may differ)",
 	)
 }

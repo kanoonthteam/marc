@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -49,6 +50,9 @@ type templateData struct {
 	BinaryPath string
 	ConfigPath string
 	LogPath    string
+	User       string // unix user the daemon runs as (Linux only)
+	Group      string // unix group the daemon runs as (Linux only)
+	HomeDir    string // home directory of User (used in ReadWritePaths)
 }
 
 // Run is the main entry point. It dispatches based on runtime.GOOS.
@@ -101,6 +105,42 @@ func logPath() string {
 		return "~/.marc/marc.log"
 	}
 	return filepath.Join(home, ".marc", "marc.log")
+}
+
+// resolveTargetUser returns the user the daemon should run as on Linux.
+// Priority:
+//
+//	1. SUDO_USER env var (set when invoked via sudo) — preserves the calling
+//	   user so capture.jsonl in their ~/.marc/ stays owned by them.
+//	2. USER env var.
+//	3. The euid's name from /etc/passwd.
+//
+// Also returns the user's primary group and home directory, used by the
+// systemd template for ReadWritePaths (so ProtectSystem=strict can grant
+// the daemon write access to ~/.marc/ without granting the rest of the FS).
+func resolveTargetUser() (username, group, home string) {
+	candidate := os.Getenv("SUDO_USER")
+	if candidate == "" {
+		candidate = os.Getenv("USER")
+	}
+	if candidate != "" {
+		if u, err := user.Lookup(candidate); err == nil {
+			grp := u.Gid
+			if g, err := user.LookupGroupId(u.Gid); err == nil {
+				grp = g.Name
+			}
+			return u.Username, grp, u.HomeDir
+		}
+	}
+	// Fallback: current effective uid.
+	if u, err := user.Current(); err == nil {
+		grp := u.Gid
+		if g, err := user.LookupGroupId(u.Gid); err == nil {
+			grp = g.Name
+		}
+		return u.Username, grp, u.HomeDir
+	}
+	return "", "", ""
 }
 
 // writeFile writes content to path with mode 0644, creating parent dirs.

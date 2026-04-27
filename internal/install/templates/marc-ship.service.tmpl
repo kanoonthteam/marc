@@ -10,6 +10,14 @@ Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
+{{if .User}}User={{.User}}
+{{end}}{{if .Group}}Group={{.Group}}
+{{end}}NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+{{if .HomeDir}}ReadWritePaths={{.HomeDir}}/.marc
+{{end}}
 
 [Install]
 WantedBy=default.target

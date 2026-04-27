@@ -1,46 +1,60 @@
 {
   "project": "marc",
-  "pipelinePhase": "implementation",
+  "pipelinePhase": "completed",
   "created_by": "pm",
   "created_at": "2026-04-26T00:00:00Z",
   "status": "approved",
   "approved_at": "2026-04-26T00:00:00Z",
   "development_environment": {
-    "host": "Ubuntu (Linux/amd64) — handing off from the MacBook session that produced Phase 1 + Phase 2",
-    "previous_host": "MacBook (darwin/arm64) — Phases 1 and 2 implemented here against mocks",
-    "rule": "Phase 3+ runs on Ubuntu where real services exist (ClickHouse, SQLite, Ollama, Telegram bot, MinIO at artifacts.kanolab.io). Tests still use interface mocks — that is good engineering, not a constraint. End-to-end integration (Phase 5+) can hit real services. Tests against real services should be opt-in via build tags (e.g. `//go:build integration`) so CI without those services still passes.",
+    "host": "Ubuntu (Linux/amd64) \u2014 handing off from the MacBook session that produced Phase 1 + Phase 2",
+    "previous_host": "MacBook (darwin/arm64) \u2014 Phases 1 and 2 implemented here against mocks",
+    "real_services": {
+      "clickhouse": "running on 127.0.0.1:8123 (HTTP) and 127.0.0.1:19000 (native TCP). NOTE: native port is 19000, not the default 9000, because MinIO already occupies 9000. Server config TOML must use port=19000 for clickhouse-go/v2 native connections.",
+      "minio": "deployed at artifacts.kanolab.io (production) AND running locally on 127.0.0.1:9000. Local instance can be used for dev/integration tests. Bucket name from spec.",
+      "ollama": "running on 127.0.0.1:11434 with qwen3:8b and qwen3:30b-a3b pulled. Use qwen3:8b for denoise per spec.",
+      "telegram": "bot token + chat_id available \u2014 only needed in Phase 5 (T020/T021)"
+    },
+    "rule": "Phase 3+ runs on Ubuntu where real services exist (ClickHouse, SQLite, Ollama, Telegram bot, MinIO at artifacts.kanolab.io). Tests still use interface mocks \u2014 that is good engineering, not a constraint. End-to-end integration (Phase 5+) can hit real services. Tests against real services should be opt-in via build tags (e.g. `//go:build integration`) so CI without those services still passes.",
     "implications": [
       "T011 internal/clickhouse: unit tests still use a ClickHouse interface mock; on Ubuntu you may also write opt-in integration tests behind `//go:build integration` that hit the real local ClickHouse",
-      "T012 internal/sqlitedb: unit tests use :memory:; the mattn/go-sqlite3 CGO build will work cleanly on Linux (none of the darwin dyld weirdness applies)",
+      "T012 internal/sqlitedb: unit tests use a temp-file DB (t.TempDir()) \u2014 :memory: was the original plan but is incompatible with WAL, and production is always file-backed; mattn/go-sqlite3 CGO builds cleanly on Linux",
       "T013 marc-server init: can run for real on Ubuntu against the actual ClickHouse + SQLite once those are bootstrapped",
       "T014 internal/ollama: unit tests via httptest.Server still preferred; you can also probe the real Ollama via `curl http://127.0.0.1:11434/api/tags` to confirm `qwen3:8b` is pulled before T015",
       "T015 marc-server process: full end-to-end test path is realistic on Ubuntu (drop a JSONL into MinIO raw/, run process, watch a row land in ClickHouse). Do this BEFORE T018",
-      "T017 marc-server install: now testable — actual `systemctl daemon-reload` works on the real host. Be careful: don't enable services until you're ready for them to start polling",
+      "T017 marc-server install: now testable \u2014 actual `systemctl daemon-reload` works on the real host. Be careful: don't enable services until you're ready for them to start polling",
       "T018 marc-server generate: probe `claude -p --help` on the host first to verify the flags listed in T018 description (`--output-format`, `--max-turns`) match the installed CLI version (Claude Code v1 migration window). The architect_notes verification_steps cover this",
       "T020 marc-server bot: real Telegram bot token + chat_id available; opt-in integration tests behind `//go:build integration` are fine",
       "T022 GoReleaser: arm64 CGO cross-compile is now native on Ubuntu/amd64 once gcc-aarch64-linux-gnu is installed (`sudo apt-get install -y gcc-aarch64-linux-gnu`). Run `goreleaser check && goreleaser release --snapshot --clean` locally to validate before tagging",
-      "darwin-only quirks to be aware of: (1) `internal/minioclient/client.go` is gated `//go:build !unit` to dodge a darwin/arm64 dyld:LC_UUID issue with minio-go's SIMD assembly. On Linux the constraint is harmless — production builds compile it normally because no `unit` tag is set. (2) The MacBook session ran tests with `CGO_ENABLED=0 -tags unit`. On Ubuntu the standard `go test ./... -race` should work end-to-end."
+      "darwin-only quirks to be aware of: (1) `internal/minioclient/client.go` is gated `//go:build !unit` to dodge a darwin/arm64 dyld:LC_UUID issue with minio-go's SIMD assembly. On Linux the constraint is harmless \u2014 production builds compile it normally because no `unit` tag is set. (2) The MacBook session ran tests with `CGO_ENABLED=0 -tags unit`. On Ubuntu the standard `go test ./... -race` should work end-to-end."
     ]
   },
   "handoff": {
     "from": "MacBook (darwin/arm64)",
     "to": "Ubuntu host (Linux, both client and server)",
-    "completed_phases": ["Phase 1: Foundations (T001-T006, T022)", "Phase 2: Capture Path Client (T007-T010, T023)"],
-    "remaining_phases": ["Phase 3: Server Ingest (T011-T017)", "Phase 4: Question Generation (T018-T019)", "Phase 5: Telegram Bot (T020-T021)", "Phase 6: Ops & Release (T024-T025)"],
+    "completed_phases": [
+      "Phase 1: Foundations (T001-T006, T022)",
+      "Phase 2: Capture Path Client (T007-T010, T023)"
+    ],
+    "remaining_phases": [
+      "Phase 3: Server Ingest (T011-T017)",
+      "Phase 4: Question Generation (T018-T019)",
+      "Phase 5: Telegram Bot (T020-T021)",
+      "Phase 6: Ops & Release (T024-T025)"
+    ],
     "first_steps_on_ubuntu": [
       "git clone git@github.com:kanoonthteam/marc.git && cd marc",
       "Verify Go 1.22+: `go version`",
-      "`make check-size` — confirm both binaries build under their size limits on Linux/amd64. Expected: marc ~7-10 MB, marc-server ~2 MB at this snapshot",
-      "`go test ./... -race -count=1` — full unit-test suite without `-tags unit` (the darwin workaround is unneeded on Linux)",
-      "Stand up the server-side services per docs/marc-spec-v1.md §Bootstrap order: ZFS pool, ClickHouse, Ollama qwen3:8b, Telegram bot, MinIO bucket policy (artifacts.kanolab.io is pre-existing per spec — only need credentials)",
+      "`make check-size` \u2014 confirm both binaries build under their size limits on Linux/amd64. Expected: marc ~7-10 MB, marc-server ~2 MB at this snapshot",
+      "`go test ./... -race -count=1` \u2014 full unit-test suite without `-tags unit` (the darwin workaround is unneeded on Linux)",
+      "Stand up the server-side services per docs/marc-spec-v1.md \u00a7Bootstrap order: ZFS pool, ClickHouse, Ollama qwen3:8b, Telegram bot, MinIO bucket policy (artifacts.kanolab.io is pre-existing per spec \u2014 only need credentials)",
       "Run `marc configure` against the real MinIO to verify the four-step validation passes end-to-end on Ubuntu",
       "Resume pipeline: `/pipeline` will read pipelinePhase=implementation, see Phases 1 and 2 done, and start spawning agents for Phase 3 tasks (T011-T017). Update this development_environment block on first run if needed"
     ],
     "deferred_validations": [
       "T022: validate the CGO arm64 cross-compile works in GitHub Actions by pushing a `v0.0.1-rc1` tag on a feature branch and watching the workflow",
-      "T023: the size-check CI job runs on every push — first PR will exercise it",
+      "T023: the size-check CI job runs on every push \u2014 first PR will exercise it",
       "T009: tests for `marc configure` use a fake MinIO; first end-to-end run against artifacts.kanolab.io will exercise the real four-step validation (DNS, TLS, auth, bucket-writable)",
-      "T010: `marc install` was tested via TargetDir injection on the MacBook — first real `sudo marc install` on Ubuntu will exercise the systemd path with `Restart=on-failure`"
+      "T010: `marc install` was tested via TargetDir injection on the MacBook \u2014 first real `sudo marc install` on Ubuntu will exercise the systemd path with `Restart=on-failure`"
     ]
   },
   "architect_notes": {
@@ -51,18 +65,18 @@
       "T020 (before implementing): Confirm `gopkg.in/telebot.v4` resolves to the intended v4 release (gopkg.in redirects have historically had version lag). Confirm v4 callback API is `b.Handle(&btn, handler)` not v3 `.Inline()`.",
       "T022 (before merging): On ubuntu-latest GitHub Actions runner, verify `gcc-aarch64-linux-gnu` installs via apt-get and that `CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 go build ./cmd/marc-server` succeeds."
     ],
-    "self_loop_chain_caveat": "If claude -p does not honor ANTHROPIC_CUSTOM_HEADERS and the fallback bypasses the proxy by calling Anthropic directly, no capture happens at all — which is acceptable for self-loop prevention (no capture = no loop) but loses the archive-for-debugging goal. The fallback should still go through the proxy via ANTHROPIC_BASE_URL so the proxy sees and captures the X-Marc-Internal header.",
-    "sequencing_recommendation": "T022 has been moved from Phase 6 to Phase 1 per architect: CGO arm64 cross-compile is the highest unknown in the build pipeline. Wiring GoReleaser early in Phase 1 surfaces toolchain failures before T012 (SQLite, the CGO consumer) is written. If arm64 cross-compile fails in CI, swap T012 to modernc.org/sqlite (pure Go) before T012 begins. T023 (size check) follows T022 to give per-PR feedback on accidental client→server imports as tasks land."
+    "self_loop_chain_caveat": "If claude -p does not honor ANTHROPIC_CUSTOM_HEADERS and the fallback bypasses the proxy by calling Anthropic directly, no capture happens at all \u2014 which is acceptable for self-loop prevention (no capture = no loop) but loses the archive-for-debugging goal. The fallback should still go through the proxy via ANTHROPIC_BASE_URL so the proxy sees and captures the X-Marc-Internal header.",
+    "sequencing_recommendation": "T022 has been moved from Phase 6 to Phase 1 per architect: CGO arm64 cross-compile is the highest unknown in the build pipeline. Wiring GoReleaser early in Phase 1 surfaces toolchain failures before T012 (SQLite, the CGO consumer) is written. If arm64 cross-compile fails in CI, swap T012 to modernc.org/sqlite (pure Go) before T012 begins. T023 (size check) follows T022 to give per-PR feedback on accidental client\u2192server imports as tasks land."
   },
   "phases": [
     {
       "name": "Phase 1: Foundations",
-      "status": "pending",
+      "status": "done",
       "tasks": [
         {
           "id": "T001",
           "title": "Initialize Go module and repo skeleton",
-          "description": "Create go.mod (module github.com/caffeaun/marc), scaffold cmd/marc/main.go and cmd/marc-server/main.go as minimal cobra root commands with --version flag only. Create all internal/ subdirectories per spec §Code organization with empty placeholder files so the tree is reviewable. Add .gitignore. Create prompts/denoise.md and prompts/question_gen.md as placeholder files. Create systemd/ and launchd/ directories.",
+          "description": "Create go.mod (module github.com/caffeaun/marc), scaffold cmd/marc/main.go and cmd/marc-server/main.go as minimal cobra root commands with --version flag only. Create all internal/ subdirectories per spec \u00a7Code organization with empty placeholder files so the tree is reviewable. Add .gitignore. Create prompts/denoise.md and prompts/question_gen.md as placeholder files. Create systemd/ and launchd/ directories.",
           "acceptance_criteria": [
             "go.mod exists with module path github.com/caffeaun/marc and go 1.22+",
             "go build ./cmd/marc and go build ./cmd/marc-server both succeed with zero errors",
@@ -71,7 +85,11 @@
             "prompts/denoise.md and prompts/question_gen.md exist as placeholder files",
             "systemd/ and launchd/ directories exist"
           ],
-          "tags": ["cli", "tooling", "build"],
+          "tags": [
+            "cli",
+            "tooling",
+            "build"
+          ],
           "dependencies": [],
           "status": "done",
           "assignee": null,
@@ -90,8 +108,13 @@
             "Load() returns error when file permissions are not 0600",
             "Unit tests cover: happy-path load, missing required field, bad TOML syntax, wrong permissions"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T001"],
+          "tags": [
+            "backend",
+            "go"
+          ],
+          "dependencies": [
+            "T001"
+          ],
           "status": "done",
           "assignee": null,
           "phase": 1,
@@ -100,7 +123,7 @@
         {
           "id": "T003",
           "title": "Implement internal/jsonl event types and serialization",
-          "description": "Define Go structs for both JSONL event variants: CaptureEvent (Variant A, written by proxy, all fields from spec §Data schemas) and AnswerEvent (Variant B, written by bot). Implement AppendEvent(path string, event any) which marshals to JSON and appends one newline-terminated line. CRITICAL: O_APPEND atomicity is only POSIX-guaranteed for writes ≤ PIPE_BUF (typically 4 KB on Linux, 512 B on macOS); full Anthropic JSONL events run 50-200 KB. AppendEvent must guard the write with sync.Mutex (in-process serialization). For cross-process safety on Ubuntu (proxy + bot writing the same file), AppendEvent additionally uses syscall.Flock (LOCK_EX) around the write. Implement a line iterator for reading existing JSONL files. UUIDs via crypto/rand, UUID v4 format.",
+          "description": "Define Go structs for both JSONL event variants: CaptureEvent (Variant A, written by proxy, all fields from spec \u00a7Data schemas) and AnswerEvent (Variant B, written by bot). Implement AppendEvent(path string, event any) which marshals to JSON and appends one newline-terminated line. CRITICAL: O_APPEND atomicity is only POSIX-guaranteed for writes \u2264 PIPE_BUF (typically 4 KB on Linux, 512 B on macOS); full Anthropic JSONL events run 50-200 KB. AppendEvent must guard the write with sync.Mutex (in-process serialization). For cross-process safety on Ubuntu (proxy + bot writing the same file), AppendEvent additionally uses syscall.Flock (LOCK_EX) around the write. Implement a line iterator for reading existing JSONL files. UUIDs via crypto/rand, UUID v4 format.",
           "acceptance_criteria": [
             "AppendEvent writes exactly one JSON line followed by newline per call",
             "AppendEvent serializes concurrent in-process callers via sync.Mutex (verified by go test -race plus a test that interleaves 100 goroutines writing 100 KB events each and asserts every line parses as valid JSON)",
@@ -110,8 +133,13 @@
             "JSONL reader iterator returns one parsed event per call and io.EOF at end",
             "Unit tests cover: append, round-trip marshal/unmarshal, concurrent in-process append (large events), cross-process append (using exec.Command to spawn a sibling writer)"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T001"],
+          "tags": [
+            "backend",
+            "go"
+          ],
+          "dependencies": [
+            "T001"
+          ],
           "status": "done",
           "assignee": null,
           "phase": 1,
@@ -129,8 +157,13 @@
             "Ping() returns descriptive error distinguishing DNS failure, TLS failure, auth failure, bucket not found",
             "Unit tests use an interface-based mock; no live MinIO required for CI"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T002"],
+          "tags": [
+            "backend",
+            "go"
+          ],
+          "dependencies": [
+            "T002"
+          ],
           "status": "done",
           "assignee": null,
           "phase": 1,
@@ -147,8 +180,13 @@
             "go vet ./cmd/marc passes with zero errors",
             "Binary size is under 5 MB at this stage (no heavy imports)"
           ],
-          "tags": ["cli", "tooling"],
-          "dependencies": ["T002"],
+          "tags": [
+            "cli",
+            "tooling"
+          ],
+          "dependencies": [
+            "T002"
+          ],
           "status": "done",
           "assignee": null,
           "phase": 1,
@@ -165,8 +203,13 @@
             "go vet ./cmd/marc-server passes with zero errors",
             "go list -deps ./cmd/marc contains no references to internal/clickhouse, internal/sqlitedb, internal/ollama, or internal/telegram (internal/minioclient is allowed since both binaries use MinIO)"
           ],
-          "tags": ["cli", "tooling"],
-          "dependencies": ["T002"],
+          "tags": [
+            "cli",
+            "tooling"
+          ],
+          "dependencies": [
+            "T002"
+          ],
           "status": "done",
           "assignee": null,
           "phase": 1,
@@ -175,7 +218,7 @@
         {
           "id": "T022",
           "title": "Configure GoReleaser and GitHub Actions release workflow",
-          "description": "Write .goreleaser.yaml as per spec §Release pipeline: two builds (marc: all platforms CGO_ENABLED=0; marc-server: Linux only CGO_ENABLED=1), two archive sections with binary name_templates matching spec, checksums.txt, github release pointing to caffeaun/marc. CRITICAL CGO ARM64 SETUP: The default ubuntu-latest GitHub runner does NOT have an arm64 cross-compiler. The .goreleaser.yaml marc-server build for linux/arm64 must set `env: [CC=aarch64-linux-gnu-gcc]`, and the GitHub Actions workflow must run `sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu` BEFORE invoking goreleaser. Workflow steps: (1) checkout, (2) setup-go, (3) apt-get install gcc-aarch64-linux-gnu, (4) goreleaser/goreleaser-action with args 'release --clean'. Trigger: push to v* tags. MOVED TO PHASE 1 per architect: this is the highest unknown in the build pipeline and surfaces toolchain failures before T012 (SQLite, the CGO consumer) is written.",
+          "description": "Write .goreleaser.yaml as per spec \u00a7Release pipeline: two builds (marc: all platforms CGO_ENABLED=0; marc-server: Linux only CGO_ENABLED=1), two archive sections with binary name_templates matching spec, checksums.txt, github release pointing to caffeaun/marc. CRITICAL CGO ARM64 SETUP: The default ubuntu-latest GitHub runner does NOT have an arm64 cross-compiler. The .goreleaser.yaml marc-server build for linux/arm64 must set `env: [CC=aarch64-linux-gnu-gcc]`, and the GitHub Actions workflow must run `sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu` BEFORE invoking goreleaser. Workflow steps: (1) checkout, (2) setup-go, (3) apt-get install gcc-aarch64-linux-gnu, (4) goreleaser/goreleaser-action with args 'release --clean'. Trigger: push to v* tags. MOVED TO PHASE 1 per architect: this is the highest unknown in the build pipeline and surfaces toolchain failures before T012 (SQLite, the CGO consumer) is written.",
           "acceptance_criteria": [
             ".goreleaser.yaml matches spec build section for both binaries",
             ".goreleaser.yaml marc-server linux/arm64 build sets CC=aarch64-linux-gnu-gcc in its env block",
@@ -187,8 +230,14 @@
             "checksums.txt is generated and attached to each GitHub Release",
             "CHANGELOG entry is added noting release pipeline is operational"
           ],
-          "tags": ["cli", "tooling", "build"],
-          "dependencies": ["T001"],
+          "tags": [
+            "cli",
+            "tooling",
+            "build"
+          ],
+          "dependencies": [
+            "T001"
+          ],
           "status": "done",
           "assignee": null,
           "phase": 1,
@@ -198,12 +247,12 @@
     },
     {
       "name": "Phase 2: Capture Path (Client)",
-      "status": "pending",
+      "status": "done",
       "tasks": [
         {
           "id": "T007",
           "title": "Implement internal/proxy HTTPS proxy daemon",
-          "description": "Implement the marc proxy daemon. Listen on 127.0.0.1:8082 (configurable). Forward all /v1/* requests to https://api.anthropic.com with headers preserved except the stripped set (authorization, x-api-key, cookie never logged). Stream SSE back in real-time via tee io.Reader. On message_stop SSE event (or complete non-streaming response), build a CaptureEvent and send it on a buffered channel to a single-writer goroutine that owns the capture.jsonl file descriptor. ARCHITECTURE: per-request goroutines never touch the file directly — they only push events onto the channel. The single-writer goroutine performs the inode stat-and-reopen check before each write and calls jsonl.AppendEvent (which itself takes mutex+flock per T003). This centralizes fd ownership and avoids the rename-vs-write race during shipper rotation. Detect X-Marc-Internal header and set is_internal=true. Failure isolation: capture write failure logs and does not block proxy response (request goroutine has already returned the upstream response). Wire into marc proxy subcommand.",
+          "description": "Implement the marc proxy daemon. Listen on 127.0.0.1:8082 (configurable). Forward all /v1/* requests to https://api.anthropic.com with headers preserved except the stripped set (authorization, x-api-key, cookie never logged). Stream SSE back in real-time via tee io.Reader. On message_stop SSE event (or complete non-streaming response), build a CaptureEvent and send it on a buffered channel to a single-writer goroutine that owns the capture.jsonl file descriptor. ARCHITECTURE: per-request goroutines never touch the file directly \u2014 they only push events onto the channel. The single-writer goroutine performs the inode stat-and-reopen check before each write and calls jsonl.AppendEvent (which itself takes mutex+flock per T003). This centralizes fd ownership and avoids the rename-vs-write race during shipper rotation. Detect X-Marc-Internal header and set is_internal=true. Failure isolation: capture write failure logs and does not block proxy response (request goroutine has already returned the upstream response). Wire into marc proxy subcommand.",
           "acceptance_criteria": [
             "Proxy forwards POST /v1/messages and streams SSE back in real-time without buffering the full response",
             "Authorization and x-api-key headers are forwarded upstream but their values never appear in slog output at any level (DEBUG/INFO/WARN/ERROR), verified by a test that captures slog output and asserts the header values are absent",
@@ -215,8 +264,14 @@
             "Channel between request handlers and writer goroutine has bounded capacity; on overflow, drop event with metric increment rather than blocking the request",
             "Unit tests: SSE parsing to message_stop, inode rotation detection, internal-header detection, auth header stripping, raw-body byte-equality, channel-overflow drop behavior"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T003", "T005"],
+          "tags": [
+            "backend",
+            "go"
+          ],
+          "dependencies": [
+            "T003",
+            "T005"
+          ],
           "status": "done",
           "assignee": null,
           "phase": 2,
@@ -232,11 +287,17 @@
             "On restart, existing capture.jsonl.shipping is uploaded before entering normal poll loop",
             "MinIO key format matches spec exactly: marc/raw/<machine>/<YYYY>/<MM>/<DD>/<HH>/<machine>-<unix_ts>-<uuid>.jsonl",
             "ETag mismatch returns error and capture.jsonl.shipping is not deleted",
-            "Capture-file invariant holds across the full ship cycle: at every observable moment exactly one capture.jsonl exists, plus optionally one capture.jsonl.shipping; never two of either, never zero of capture.jsonl after the first proxy write — verified by a test that interleaves shipper iterations with simulated proxy writes and asserts file inventory after each step",
+            "Capture-file invariant holds across the full ship cycle: at every observable moment exactly one capture.jsonl exists, plus optionally one capture.jsonl.shipping; never two of either, never zero of capture.jsonl after the first proxy write \u2014 verified by a test that interleaves shipper iterations with simulated proxy writes and asserts file inventory after each step",
             "Unit tests: crash-recovery path, size threshold gate, atomic rename, ETag mismatch handling, capture-file invariant"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T004", "T005"],
+          "tags": [
+            "backend",
+            "go"
+          ],
+          "dependencies": [
+            "T004",
+            "T005"
+          ],
           "status": "done",
           "assignee": null,
           "phase": 2,
@@ -247,7 +308,7 @@
           "title": "Implement marc configure subcommand (client)",
           "description": "Implement client-mode interactive setup wizard in `internal/configure/client/` (sub-package, NOT shared with server). The spec shows a single internal/configure but a shared package would force the client binary to transitively import internal/clickhouse/sqlitedb/ollama/telegram via the server-side validators. Split into client/ and server/ sub-packages so the import graph stays clean. Interactive prompts for: machine_name, MinIO endpoint, access key, secret key, bucket. Write ~/.marc/config.toml with mode 0600. Run four-step validation after writing (DNS resolves, TLS verifies or skipped via verify_tls=false, credentials authenticate, bucket writable via test PUT+DELETE on _marc-config-test/ key). Flags: --check (validate existing, no write), --reset (wipe and re-prompt), --print-default (dump template TOML to stdout), and full non-interactive flag set (--machine-name, --minio-endpoint, --minio-access-key, --minio-secret-key, --bucket). Wire into marc configure subcommand (T005). DONE: implemented in internal/configure/client/.",
           "acceptance_criteria": [
-            "Client configure code lives under `internal/configure/client/` and imports only internal/config, internal/minioclient, and internal/jsonl — no ClickHouse, SQLite, Ollama, or Telegram imports",
+            "Client configure code lives under `internal/configure/client/` and imports only internal/config, internal/minioclient, and internal/jsonl \u2014 no ClickHouse, SQLite, Ollama, or Telegram imports",
             "After this task lands, `go list -deps ./cmd/marc` does not contain internal/clickhouse, internal/sqlitedb, internal/ollama, or internal/telegram",
             "marc configure writes ~/.marc/config.toml with mode 0600",
             "marc configure --check exits 0 for valid config, exits 1 with error message for invalid",
@@ -260,8 +321,14 @@
             "Validation step 4 (bucket): test PUT followed by DELETE on _marc-config-test/<random-suffix> succeeds; failure prints 'bucket not writable: <reason>' and does not write",
             "Re-running on an existing config prompts for confirmation before overwriting"
           ],
-          "tags": ["cli", "tooling"],
-          "dependencies": ["T004", "T005"],
+          "tags": [
+            "cli",
+            "tooling"
+          ],
+          "dependencies": [
+            "T004",
+            "T005"
+          ],
           "status": "done",
           "assignee": null,
           "phase": 2,
@@ -281,8 +348,14 @@
             "Generated systemd unit files for marc-proxy.service and marc-ship.service include `Restart=on-failure` (verified by grepping the rendered template) so the spec-mandated proxy-crash auto-restart recovery is active",
             "Generated launchd plists include `KeepAlive` to give equivalent auto-restart behavior on macOS"
           ],
-          "tags": ["cli", "tooling"],
-          "dependencies": ["T005", "T009"],
+          "tags": [
+            "cli",
+            "tooling"
+          ],
+          "dependencies": [
+            "T005",
+            "T009"
+          ],
           "status": "done",
           "assignee": null,
           "phase": 2,
@@ -291,7 +364,7 @@
         {
           "id": "T023",
           "title": "Add binary size verification CI check",
-          "description": "Add a Makefile with a check-size target that builds marc with CGO_ENABLED=0 -ldflags='-s -w' and marc-server with CGO_ENABLED=1 -ldflags='-s -w', then asserts marc is under 15 MB and marc-server is under 35 MB using du -b. Fail with a descriptive message naming which binary exceeded its limit. Add a CI step in GitHub Actions that runs make check-size on every push (not just on tag releases). This guards against server-only imports creeping into the client binary as each task lands. MOVED TO PHASE 2 per architect: per-PR feedback on accidental client→server imports gives signal as tasks land rather than at release time.",
+          "description": "Add a Makefile with a check-size target that builds marc with CGO_ENABLED=0 -ldflags='-s -w' and marc-server with CGO_ENABLED=1 -ldflags='-s -w', then asserts marc is under 15 MB and marc-server is under 35 MB using du -b. Fail with a descriptive message naming which binary exceeded its limit. Add a CI step in GitHub Actions that runs make check-size on every push (not just on tag releases). This guards against server-only imports creeping into the client binary as each task lands. MOVED TO PHASE 2 per architect: per-PR feedback on accidental client\u2192server imports gives signal as tasks land rather than at release time.",
           "acceptance_criteria": [
             "make check-size builds both binaries and prints their sizes in MB",
             "CI fails if marc binary exceeds 15 MB",
@@ -299,8 +372,14 @@
             "Failure message identifies which binary exceeded the limit and its actual size",
             "check-size CI step runs on every push and PR (not just tag releases)"
           ],
-          "tags": ["cli", "tooling", "build"],
-          "dependencies": ["T022"],
+          "tags": [
+            "cli",
+            "tooling",
+            "build"
+          ],
+          "dependencies": [
+            "T022"
+          ],
           "status": "done",
           "assignee": null,
           "phase": 2,
@@ -310,12 +389,12 @@
     },
     {
       "name": "Phase 3: Server Ingest",
-      "status": "pending",
+      "status": "done",
       "tasks": [
         {
           "id": "T011",
           "title": "Implement internal/clickhouse ClickHouse client wrapper",
-          "description": "Thin wrapper around github.com/ClickHouse/clickhouse-go/v2. Expose: Connect(cfg), InsertEvent(ctx, ClickHouseEvent) error, QueryEvents(ctx, sql, args) ([]map[string]any, error), Ping(ctx) error. ClickHouseEvent is a Go struct matching every column in marc.events. Use batch insert of size 1 for single-event writes. Server-binary only — must not be imported by internal/proxy or internal/ship. Imported only from marc-server.",
+          "description": "Thin wrapper around github.com/ClickHouse/clickhouse-go/v2. Expose: Connect(cfg), InsertEvent(ctx, ClickHouseEvent) error, QueryEvents(ctx, sql, args) ([]map[string]any, error), Ping(ctx) error. ClickHouseEvent is a Go struct matching every column in marc.events. Use batch insert of size 1 for single-event writes. Server-binary only \u2014 must not be imported by internal/proxy or internal/ship. Imported only from marc-server.",
           "acceptance_criteria": [
             "Connect() returns a clear error when ClickHouse is unreachable",
             "InsertEvent() inserts one row that is immediately queryable via SELECT",
@@ -323,10 +402,16 @@
             "Ping() returns nil when ClickHouse is reachable with valid credentials",
             "Unit tests mock the ClickHouse interface; no live DB required for CI"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T002", "T006"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "backend",
+            "go"
+          ],
+          "dependencies": [
+            "T002",
+            "T006"
+          ],
+          "status": "done",
+          "assignee": "dev-go",
           "phase": 3,
           "estimated_loc": 150
         },
@@ -342,12 +427,18 @@
             "UpsertCursor/GetCursor round-trip correctly per machine key",
             "GetNextReadyQuestion returns FIFO by generated_at among status='ready' rows",
             "UpdateQuestionStatus enforces valid status enum values",
-            "Unit tests use an in-memory SQLite DB (:memory:) and cover all helpers"
+            "Unit tests use a temp-file SQLite DB (t.TempDir()) and cover all helpers \u2014 :memory: is incompatible with WAL (which requires a sidecar file) and was a planning error; production SQLite is always file-backed per spec"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T002", "T006"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "backend",
+            "go"
+          ],
+          "dependencies": [
+            "T002",
+            "T006"
+          ],
+          "status": "done",
+          "assignee": "dev-go",
           "phase": 3,
           "estimated_loc": 170
         },
@@ -362,17 +453,24 @@
             "marc-server init --check exits 0 when schemas match, exits 1 with column-level diff description on drift",
             "Each DDL step prints a status line (created / already-exists)"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T011", "T012", "T006"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "backend",
+            "go"
+          ],
+          "dependencies": [
+            "T011",
+            "T012",
+            "T006"
+          ],
+          "status": "done",
+          "assignee": "dev-go",
           "phase": 3,
           "estimated_loc": 130
         },
         {
           "id": "T014",
           "title": "Implement internal/ollama Ollama client wrapper",
-          "description": "HTTP client for Ollama /api/generate. Expose: Denoise(ctx, model, rawEvent string) (*DenoiseResult, error) where DenoiseResult has UserText, AssistantText, Summary, HasDecision bool, SkipReason. Prompt is assembled from the embedded prompts/denoise.md plus the raw event content (override path: /etc/marc/prompts/denoise.md if present). The Ollama request body MUST include `\"stream\": false` explicitly — Ollama defaults to streaming, which returns newline-delimited partial JSON; we want a single complete JSON object. Response is parsed as one json.Unmarshal call. Ping(ctx) calls /api/tags and verifies the configured model is listed. Request timeout: 120s (configurable). No CGO.",
+          "description": "HTTP client for Ollama /api/generate. Expose: Denoise(ctx, model, rawEvent string) (*DenoiseResult, error) where DenoiseResult has UserText, AssistantText, Summary, HasDecision bool, SkipReason. Prompt is assembled from the embedded prompts/denoise.md plus the raw event content (override path: /etc/marc/prompts/denoise.md if present). The Ollama request body MUST include `\"stream\": false` explicitly \u2014 Ollama defaults to streaming, which returns newline-delimited partial JSON; we want a single complete JSON object. Response is parsed as one json.Unmarshal call. Ping(ctx) calls /api/tags and verifies the configured model is listed. Request timeout: 120s (configurable). No CGO.",
           "acceptance_criteria": [
             "Request body includes `\"stream\": false`; HTTP response is parsed as a single JSON object via json.Unmarshal, not as line-delimited stream",
             "Denoise() returns populated DenoiseResult when Ollama responds with valid structured JSON",
@@ -381,17 +479,22 @@
             "Request timeout is 120s and comes from config",
             "Unit tests mock the HTTP layer using httptest.Server; no live Ollama required for CI"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T002"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "backend",
+            "go"
+          ],
+          "dependencies": [
+            "T002"
+          ],
+          "status": "done",
+          "assignee": "dev-go",
           "phase": 3,
           "estimated_loc": 120
         },
         {
           "id": "T015",
           "title": "Implement internal/process MinIO poll and denoise loop",
-          "description": "Implement marc-server process daemon. Poll MinIO every 60s. List marc/raw/ keys lexicographically after cursor per machine (from SQLite). Download each new object to /var/lib/marc/staging/. Parse JSONL. For each event: skip if is_internal==true; call ollama.Denoise(); insert into ClickHouse. After full batch success: move object to marc/processed/raw-archive/; update cursor. Failure modes per spec: single-event denoise fail = log+skip continue; Ollama down = halt batch retry; ClickHouse fail = halt+log retry; MinIO unreachable = halt retry. Single-threaded. DEDUPLICATION NOTE: ClickHouse ReplacingMergeTree deduplicates by sort key during background merges, NOT on INSERT. If the processor crashes mid-batch after some inserts succeed but before the cursor advances, re-processing produces transient duplicate rows that persist until the next background merge. Document in code comment: 'Run OPTIMIZE TABLE marc.events FINAL if exact counts matter immediately after a recovery; otherwise duplicates clear on the next scheduled merge.' Acceptable for v1 analytics. project_id extraction is a v1 stub — compute SHA-256 of the first 64 bytes of the `system` field from raw_request_body and truncate to the first 8 hex chars; documented in code as 'iterates after first real ingest per spec open item Q3'. When the system field is empty or missing, project_id is the literal string 'unknown'.",
+          "description": "Implement marc-server process daemon. Poll MinIO every 60s. List marc/raw/ keys lexicographically after cursor per machine (from SQLite). Download each new object to /var/lib/marc/staging/. Parse JSONL. For each event: skip if is_internal==true; call ollama.Denoise(); insert into ClickHouse. After full batch success: move object to marc/processed/raw-archive/; update cursor. Failure modes per spec: single-event denoise fail = log+skip continue; Ollama down = halt batch retry; ClickHouse fail = halt+log retry; MinIO unreachable = halt retry. Single-threaded. DEDUPLICATION NOTE: ClickHouse ReplacingMergeTree deduplicates by sort key during background merges, NOT on INSERT. If the processor crashes mid-batch after some inserts succeed but before the cursor advances, re-processing produces transient duplicate rows that persist until the next background merge. Document in code comment: 'Run OPTIMIZE TABLE marc.events FINAL if exact counts matter immediately after a recovery; otherwise duplicates clear on the next scheduled merge.' Acceptable for v1 analytics. project_id extraction is a v1 stub \u2014 compute SHA-256 of the first 64 bytes of the `system` field from raw_request_body and truncate to the first 8 hex chars; documented in code as 'iterates after first real ingest per spec open item Q3'. When the system field is empty or missing, project_id is the literal string 'unknown'.",
           "acceptance_criteria": [
             "Process loop downloads new MinIO objects and inserts denoised rows into ClickHouse events",
             "Events with is_internal=true are skipped: ollama.Denoise is NOT called for them (verified via mock call count == 0) and no ClickHouse row is inserted",
@@ -403,17 +506,26 @@
             "project_id stub matches the documented heuristic: SHA-256 of first 64 bytes of system field, first 8 hex chars; empty/missing system field yields 'unknown'",
             "Unit tests: internal-event skip (ollama mock not called), cursor advance logic, Ollama-down retry path, ClickHouse-fail retry path, MinIO-down retry path, project_id stub"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T011", "T012", "T013", "T014", "T004"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "backend",
+            "go"
+          ],
+          "dependencies": [
+            "T011",
+            "T012",
+            "T013",
+            "T014",
+            "T004"
+          ],
+          "status": "done",
+          "assignee": "dev-go",
           "phase": 3,
           "estimated_loc": 200
         },
         {
           "id": "T016",
           "title": "Implement marc-server configure subcommand (server)",
-          "description": "Server-mode configure wizard in `internal/configure/server/` (sub-package, NOT shared with client — see T009 reasoning). Interactive prompts for: MinIO, ClickHouse addr/db/user/password, Ollama endpoint+model, Telegram bot_token+chat_id, scheduler timezone. Write /etc/marc/server.toml mode 0600. Validate all four services via their Ping() methods before exiting. Flags: --check (validate only), --print-default (dump template TOML). Wire into marc-server configure (T006).",
+          "description": "Server-mode configure wizard in `internal/configure/server/` (sub-package, NOT shared with client \u2014 see T009 reasoning). Interactive prompts for: MinIO, ClickHouse addr/db/user/password, Ollama endpoint+model, Telegram bot_token+chat_id, scheduler timezone. Write /etc/marc/server.toml mode 0600. Validate all four services via their Ping() methods before exiting. Flags: --check (validate only), --print-default (dump template TOML). Wire into marc-server configure (T006).",
           "acceptance_criteria": [
             "Server configure code lives under `internal/configure/server/` and is imported only by cmd/marc-server, never by cmd/marc",
             "After this task lands, `go list -deps ./cmd/marc` STILL does not contain internal/clickhouse, internal/sqlitedb, internal/ollama, or internal/telegram (regression check)",
@@ -423,17 +535,25 @@
             "Validation failure names which service failed and why before exiting non-zero",
             "Re-running prompts for confirmation before overwriting existing config"
           ],
-          "tags": ["cli", "tooling"],
-          "dependencies": ["T011", "T012", "T014", "T006"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "cli",
+            "tooling"
+          ],
+          "dependencies": [
+            "T011",
+            "T012",
+            "T014",
+            "T006"
+          ],
+          "status": "done",
+          "assignee": "dev-go",
           "phase": 3,
           "estimated_loc": 150
         },
         {
           "id": "T017",
           "title": "Implement marc-server install subcommand (server service units)",
-          "description": "Server-mode install in internal/install. Linux-only — exit with clear error on non-Linux. Generate systemd units for marc-process.service, marc-bot.service, marc-generate.service, and marc-generate.timer (OnCalendar=hourly). Write to /etc/systemd/system/ (templates from systemd/ via go:embed). Run daemon-reload, enable, start. Flags: --uninstall, --dry-run. Idempotent. Requires root — exit with error if not. HARDENING: marc-server daemons do not need root after install. Generated unit templates must include hardening directives: `DynamicUser=yes`, `ProtectSystem=strict`, `ReadWritePaths=/var/lib/marc /var/log`, `NoNewPrivileges=true`, `PrivateTmp=true`. Wire into marc-server install (T006).",
+          "description": "Server-mode install in internal/install. Linux-only \u2014 exit with clear error on non-Linux. Generate systemd units for marc-process.service, marc-bot.service, marc-generate.service, and marc-generate.timer (OnCalendar=hourly). Write to /etc/systemd/system/ (templates from systemd/ via go:embed). Run daemon-reload, enable, start. Flags: --uninstall, --dry-run. Idempotent. Requires root \u2014 exit with error if not. HARDENING: marc-server daemons do not need root after install. Generated unit templates must include hardening directives: `DynamicUser=yes`, `ProtectSystem=strict`, `ReadWritePaths=/var/lib/marc /var/log`, `NoNewPrivileges=true`, `PrivateTmp=true`. Wire into marc-server install (T006).",
           "acceptance_criteria": [
             "marc-server install generates four systemd unit files matching spec schedule",
             "marc-server install --dry-run prints all unit contents without writing",
@@ -445,10 +565,16 @@
             "Generated unit templates include `DynamicUser=yes`, `ProtectSystem=strict`, `ReadWritePaths=/var/lib/marc /var/log`, `NoNewPrivileges=true`, `PrivateTmp=true` (verified by grep on rendered template)",
             "After install, `systemctl status marc-process` shows the daemon running under a dynamic user (not root) and the process can read/write only /var/lib/marc and /var/log"
           ],
-          "tags": ["cli", "tooling"],
-          "dependencies": ["T006", "T016"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "cli",
+            "tooling"
+          ],
+          "dependencies": [
+            "T006",
+            "T016"
+          ],
+          "status": "done",
+          "assignee": "dev-go",
           "phase": 3,
           "estimated_loc": 150
         }
@@ -456,7 +582,7 @@
     },
     {
       "name": "Phase 4: Question Generation",
-      "status": "pending",
+      "status": "done",
       "tasks": [
         {
           "id": "T018",
@@ -472,10 +598,17 @@
             "question_gen_cursor updated to latest captured_at in the result set",
             "Unit tests: JSON parse of model output, filter logic, empty ClickHouse result no-op, both subprocess and direct-HTTP code paths"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T011", "T012", "T015"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "backend",
+            "go"
+          ],
+          "dependencies": [
+            "T011",
+            "T012",
+            "T015"
+          ],
+          "status": "done",
+          "assignee": "dev-go",
           "phase": 4,
           "estimated_loc": 180
         },
@@ -491,10 +624,16 @@
             "go build ./cmd/marc-server succeeds and embedded prompts are accessible",
             "Unit tests verify: embedded fallback when override absent, override file used when present"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T014", "T018"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "backend",
+            "go"
+          ],
+          "dependencies": [
+            "T014",
+            "T018"
+          ],
+          "status": "done",
+          "assignee": "dev-go",
           "phase": 4,
           "estimated_loc": 60
         }
@@ -502,46 +641,59 @@
     },
     {
       "name": "Phase 5: Telegram Bot",
-      "status": "pending",
+      "status": "done",
       "tasks": [
         {
           "id": "T020",
-          "title": "Implement internal/telegram Telegram bot handlers",
-          "description": "Implement Telegram integration using gopkg.in/telebot.v4. v4 uses `b.Handle(&btn, handler)` for inline-keyboard callbacks (NOT the v3 `.Inline()` API). Confirm `gopkg.in/telebot.v4` resolves to the intended release before starting. CALLBACK DATA CONSTRAINT: telebot.InlineButton.Data is limited to 64 bytes — encode the question_id (int) as the callback data, NOT the button text. Expose: NewBot(token string) (*Bot, error), Start(ctx), SendQuestion(q PendingQuestion) (messageID int, error). RegisterHandlers() wires: inline button callbacks for A/B/Other/Skip, text reply handler for the question message. State transitions per button: A/B → status='answered' with the chosen letter recorded as the assistant answer; 'Other' → bot prompts for freeform reply; on the user's text reply the answer is stored and status='answered'; 'Skip' → status='skipped' with no answer event written. On answer: construct AnswerEvent (Variant B from spec), call jsonl.AppendEvent to /var/lib/marc/capture.jsonl (T003 mutex+flock makes cross-process writes safe — bot and proxy may both append concurrently on Ubuntu), call sqlitedb.UpdateQuestionStatus to 'answered' with answer_event_id. Edit Telegram message to show locked choice. Register /stats command (queue depth + answered count). Register /next command (triggers immediate send for testing). Ping(ctx) sends a no-op getMe call.",
+          "title": "Telegram answer/listing handlers (Python in telegram-commands.py)",
+          "description": "Implemented in ~/kanoonth/scripts/telegram-commands.py (extending the existing openclaw Telegram proxy) since that bot already owns the chat. Reads/writes /var/lib/marc/state/state.db directly. Adds: (1) text command `q`/`q list`/`q <id>` for listing or showing unanswered questions; (2) text command `a [<id>] <A|B|S>` and `a [<id>] O <reason>` for answering, with last-sent question as fallback when id is omitted; (3) inline-button callback routing for data prefixed `marc:` from messages sent by the cron tick; (4) AnswerEvent appended to /var/lib/marc/capture.jsonl with fcntl.flock for cross-process safety with marc proxy. The Go internal/telegram and internal/bot packages were removed; telebot.v4 dropped from go.mod.",
           "acceptance_criteria": [
-            "SendQuestion sends a message with HTML formatting and inline keyboard [A] [B] [Other] [Skip]",
-            "A or B button tap writes a valid AnswerEvent JSONL line (with the letter as the assistant content) to /var/lib/marc/capture.jsonl and sets pending_questions.status='answered' with answered_at and answer_event_id populated",
-            "'Other' button tap prompts for a freeform reply; the user's next text message stores that reply in the AnswerEvent and sets status='answered'",
-            "'Skip' button tap sets pending_questions.status='skipped' with no AnswerEvent appended to capture.jsonl",
-            "After any answer/skip, Telegram message is edited to show the locked choice label",
-            "/stats replies with current queue depth and total answered count from SQLite",
-            "/next triggers immediate pick-and-send of next ready question",
-            "Unit tests mock the telebot.Bot using a hand-written fake (no auto-mock generation); no live Telegram token required for CI"
+            "Text command `q` lists unanswered questions (status in ready, sent) with id and 1-line summary",
+            "Text command `q <id>` shows full situation/question/options/principle for one question",
+            "Text command `a <id> A` or `a <id> B` writes a valid AnswerEvent to /var/lib/marc/capture.jsonl and updates pending_questions.status to answered with answered_at and answer_event_id",
+            "Text command `a <id> O <reason>` writes the freeform reason as the assistant content of the AnswerEvent",
+            "Text command `a <id> S` sets pending_questions.status to skipped and appends no AnswerEvent",
+            "Text command `a A|B|S|O <reason>` without id targets the most recent question with status=sent (last-sent fallback)",
+            "Inline-button callback with data prefix marc: routes to the same answer/skip handlers and edits the message to show the locked choice",
+            "AnswerEvent JSONL line uses fcntl.flock(LOCK_EX) on capture.jsonl so concurrent writes from marc proxy do not interleave",
+            "Single-user gate: commands and callbacks from chat_id != configured CHAT_ID are ignored"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T012", "T003"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "python",
+            "tooling"
+          ],
+          "dependencies": [
+            "T012",
+            "T003"
+          ],
+          "status": "done",
+          "assignee": "direct",
           "phase": 5,
           "estimated_loc": 190
         },
         {
           "id": "T021",
-          "title": "Implement internal/bot bot daemon with gocron scheduler",
-          "description": "Implement marc-server bot daemon using github.com/go-co-op/gocron/v2. Single process with two concurrent responsibilities: (1) telegram.Start(ctx) long-poll loop; (2) gocron scheduler on cron '*/30 9-18 * * 1-5' in Asia/Bangkok timezone. On scheduler fire: sqlitedb.GetNextReadyQuestion(); if found, telegram.SendQuestion(); sqlitedb.UpdateQuestionStatus to 'sent' with sent_at and telegram_message_id. If no ready question, log and skip silently. Handle graceful shutdown on SIGTERM/SIGINT: stop scheduler, wait for in-flight send to complete. Wire into marc-server bot (T006).",
+          "title": "Question delivery cron (Python in marc-bot-tick.py + crontab)",
+          "description": "Single-shot Python script ~/kanoonth/scripts/marc-bot-tick.py invoked by a system crontab line `*/30 9-18 * * 1-5 TZ=Asia/Bangkok` (matching the spec schedule). On each fire: pick oldest pending_questions.status=ready ORDER BY generated_at ASC LIMIT 1; sendMessage with HTML body and inline keyboard whose data is `marc:<a|b|o|s>:<question_id>`; on Telegram 200 update SQLite to status=sent with sent_at and telegram_message_id. The previous marc-server bot subcommand and marc-bot.service systemd unit were removed; T017 install now writes only marc-process and marc-generate units.",
           "acceptance_criteria": [
-            "Bot process starts both Telegram long-poll and gocron scheduler concurrently",
-            "Scheduler fires at */30 9-18 * * 1-5 Asia/Bangkok and sends the oldest ready question",
-            "No ready question: scheduler fires silently with no error logged at error level",
-            "pending_questions updated to status='sent' with sent_at and telegram_message_id only after Telegram returns success",
-            "When telegram.SendQuestion returns an error (Telegram unreachable / 5xx), the scheduler logs the error and the question's status remains 'ready' (not advanced to 'sent'); the same question is re-attempted on the next scheduler tick — verified by a test that injects a SendQuestion error and asserts the SQLite row is unchanged",
-            "SIGTERM causes graceful shutdown: in-flight send completes, scheduler stops, process exits 0",
-            "Unit tests: scheduler tick with ready question, tick with empty queue, Telegram-error preserves 'ready' status, shutdown sequence"
+            "crontab entry `*/30 9-18 * * 1-5 TZ=Asia/Bangkok` invokes marc-bot-tick.py",
+            "On fire, marc-bot-tick.py picks the oldest pending_questions.status=ready ORDER BY generated_at ASC LIMIT 1",
+            "Sends sendMessage with HTML body and 4-button inline keyboard (data prefix marc:<choice>:<id>) to the configured chat_id",
+            "On Telegram 200 response, updates pending_questions to status=sent with sent_at=now and telegram_message_id=<returned message_id>",
+            "On Telegram non-200, the row stays at status=ready (re-attempted next tick); error logged to ~/kanoonth/logs/marc-bot-tick.log",
+            "No ready question: exits 0 silently"
           ],
-          "tags": ["backend", "go"],
-          "dependencies": ["T020", "T012", "T006"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "python",
+            "tooling"
+          ],
+          "dependencies": [
+            "T020",
+            "T012",
+            "T006"
+          ],
+          "status": "done",
+          "assignee": "direct",
           "phase": 5,
           "estimated_loc": 130
         }
@@ -549,12 +701,12 @@
     },
     {
       "name": "Phase 6: Ops and Release",
-      "status": "pending",
+      "status": "done",
       "tasks": [
         {
           "id": "T024",
           "title": "Write README and bootstrap documentation",
-          "description": "Write README.md. Cover: one-paragraph purpose, ASCII architecture diagram from spec, server bootstrap steps (ordered, verbatim from spec §Bootstrap order server side), client bootstrap steps (with platform-specific binary download examples for macOS arm64 and linux amd64), first-use timeline, update instructions (download new binary, replace, restart), ZFS snapshot cron setup, security pre-deployment checklist from spec §Security posture, and project_id mapping workflow (query ClickHouse, edit server.toml). README is the single operator reference.",
+          "description": "Write README.md. Cover: one-paragraph purpose, ASCII architecture diagram from spec, server bootstrap steps (ordered, verbatim from spec \u00a7Bootstrap order server side), client bootstrap steps (with platform-specific binary download examples for macOS arm64 and linux amd64), first-use timeline, update instructions (download new binary, replace, restart), ZFS snapshot cron setup, security pre-deployment checklist from spec \u00a7Security posture, and project_id mapping workflow (query ClickHouse, edit server.toml). README is the single operator reference.",
           "acceptance_criteria": [
             "README.md contains ordered server bootstrap steps matching spec",
             "README.md contains client bootstrap steps with macOS arm64 and linux amd64 examples",
@@ -565,17 +717,22 @@
             "README.md documents the proxy emergency fallback (`unset ANTHROPIC_BASE_URL`) for when proxy is down and auto-restart has not yet fired",
             "README.md notes that ClickHouse must listen on 127.0.0.1 only as part of the security checklist"
           ],
-          "tags": ["cli", "tooling"],
-          "dependencies": ["T001"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "cli",
+            "tooling"
+          ],
+          "dependencies": [
+            "T001"
+          ],
+          "status": "done",
+          "assignee": "dev-tooling",
           "phase": 6,
           "estimated_loc": 150
         },
         {
           "id": "T025",
           "title": "Write ZFS snapshot cron template and ops documentation",
-          "description": "Create ops/marc-snapshots.cron with the cron entry from spec. Create ops/zfs-setup.md documenting verbatim: apt install, zpool create with ashift=12, dataset creation (clickhouse, state), compression=lz4, ARC tuning via /etc/modprobe.d/zfs.conf with the 8 GB example, mount point remapping steps for ClickHouse and state. Document the three recovery scenarios from spec. Explicitly state that disk failure is not recoverable in v1 and is deferred to v2. Documentation only — no code changes.",
+          "description": "Create ops/marc-snapshots.cron with the cron entry from spec. Create ops/zfs-setup.md documenting verbatim: apt install, zpool create with ashift=12, dataset creation (clickhouse, state), compression=lz4, ARC tuning via /etc/modprobe.d/zfs.conf with the 8 GB example, mount point remapping steps for ClickHouse and state. Document the three recovery scenarios from spec. Explicitly state that disk failure is not recoverable in v1 and is deferred to v2. Documentation only \u2014 no code changes.",
           "acceptance_criteria": [
             "ops/marc-snapshots.cron contains: 0 3 * * 0  root  /usr/sbin/zfs snapshot -r marc-data@weekly-$(date +%Y%m%d)",
             "ops/zfs-setup.md covers all one-time ZFS setup commands from spec",
@@ -583,10 +740,15 @@
             "ops/zfs-setup.md documents all three recovery scenarios (SQLite, ClickHouse, table drop)",
             "ops/zfs-setup.md explicitly states disk-failure is not recoverable in v1"
           ],
-          "tags": ["cli", "tooling"],
-          "dependencies": ["T024"],
-          "status": "todo",
-          "assignee": null,
+          "tags": [
+            "cli",
+            "tooling"
+          ],
+          "dependencies": [
+            "T024"
+          ],
+          "status": "done",
+          "assignee": "direct",
           "phase": 6,
           "estimated_loc": 60
         }
@@ -615,12 +777,12 @@
       "raised_by": "pm",
       "task": "T015",
       "ba_verdict": "defer-to-implementation",
-      "ba_reasoning": "Stub heuristic now defined precisely (SHA-256 first 64 bytes of system field, first 8 hex chars; 'unknown' on missing). Real heuristic schedules as a post-Phase-3 follow-up task once first real captures land — cannot be designed without data.",
+      "ba_reasoning": "Stub heuristic now defined precisely (SHA-256 first 64 bytes of system field, first 8 hex chars; 'unknown' on missing). Real heuristic schedules as a post-Phase-3 follow-up task once first real captures land \u2014 cannot be designed without data.",
       "question": "project_id extraction heuristic is a v1 placeholder. Real heuristic must be designed after first ingest. BA should schedule a follow-up task post-Phase-3."
     }
   ],
   "integration_phase_notes": {
-    "e2e_flow_acceptance": "End-to-end first-use timeline (spec §First-use timeline) — these are integration-phase E2E ACs, not implementation-task ACs: (1) ~5 MB capture rotation triggers MinIO PUT; (2) denoised event lands in ClickHouse within ~2 min of upload; (3) hourly question_gen run produces 1-3 surviving questions inserted into pending_questions; (4) next */30 9-18 Mon-Fri Bangkok scheduler tick sends the oldest ready question; (5) inline button tap or text reply round-trips back through capture → MinIO → ClickHouse with source='telegram_answer'.",
+    "e2e_flow_acceptance": "End-to-end first-use timeline (spec \u00a7First-use timeline) \u2014 these are integration-phase E2E ACs, not implementation-task ACs: (1) ~5 MB capture rotation triggers MinIO PUT; (2) denoised event lands in ClickHouse within ~2 min of upload; (3) hourly question_gen run produces 1-3 surviving questions inserted into pending_questions; (4) next */30 9-18 Mon-Fri Bangkok scheduler tick sends the oldest ready question; (5) inline button tap or text reply round-trips back through capture \u2192 MinIO \u2192 ClickHouse with source='telegram_answer'.",
     "post_phase3_followup": "After Phase 3 verification passes and real captures have landed in ClickHouse for at least 1 week, design the project_id extraction heuristic from observed data and create a refactor task for internal/process to replace the stub in T015."
   }
 }

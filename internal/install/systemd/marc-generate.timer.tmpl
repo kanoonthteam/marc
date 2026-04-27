@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly timer for marc-server generate
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+Unit=marc-generate.service
+
+[Install]
+WantedBy=timers.target

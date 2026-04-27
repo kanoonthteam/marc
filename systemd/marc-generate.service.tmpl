@@ -1,0 +1,15 @@
+[Unit]
+Description=marc-server generate (candidate question generation, runs once per timer tick)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{.BinaryPath}} generate --config /etc/marc/server.toml
+DynamicUser=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/marc /var/log
+NoNewPrivileges=true
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal

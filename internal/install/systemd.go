@@ -44,8 +44,13 @@ func renderSystemd(tmplName string, data templateData) (string, error) {
 
 // installSystemd handles Linux systemd install/uninstall/dry-run.
 func installSystemd(ctx context.Context, opts Options) error {
-	// Linux requires root for /etc/systemd/system/.
-	if opts.geteuid() != 0 {
+	// Linux requires root only when actually writing to /etc/systemd/system/.
+	// --dry-run just renders and prints templates and never touches the disk
+	// or systemctl, so the root gate is skipped in that mode. A custom
+	// TargetDir (used by tests and by user-mode systemd installs under
+	// ~/.config/systemd/user/) also bypasses the gate since the operator
+	// already chose a path they can write to.
+	if !opts.DryRun && opts.TargetDir == "" && opts.geteuid() != 0 {
 		return fmt.Errorf(
 			"marc install on Linux requires root; re-run with sudo\n" +
 				"  Remediation: sudo marc install",
@@ -57,9 +62,13 @@ func installSystemd(ctx context.Context, opts Options) error {
 		targetDir = "/etc/systemd/system"
 	}
 
+	user, group, home := resolveTargetUser()
 	data := templateData{
 		BinaryPath: opts.BinaryPath,
 		ConfigPath: opts.ConfigPath,
+		User:       user,
+		Group:      group,
+		HomeDir:    home,
 	}
 
 	if opts.Uninstall {

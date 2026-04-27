@@ -334,6 +334,29 @@ func TestIdempotentReinstall(t *testing.T) {
 // --- 11. TestLinuxNonRootRejected ---
 
 func TestLinuxNonRootRejected(t *testing.T) {
+	// The root gate fires only when writing to the default /etc/systemd/system
+	// path. Custom TargetDir (used for --user installs and tests) bypasses it
+	// because the operator already picked a path they can write to.
+	opts := Options{
+		BinaryPath: "/usr/local/bin/marc",
+		ConfigPath: "/home/user/.marc/config.toml",
+		SkipLoad:   true,
+		geteuid:    func() int { return 1000 }, // non-root
+	}
+	captureOutput(&opts)
+
+	err := installSystemd(context.Background(), opts)
+	if err == nil {
+		t.Fatal("expected error for non-root with default target dir, got nil")
+	}
+	if !strings.Contains(err.Error(), "requires root") {
+		t.Errorf("error %q missing 'requires root'", err.Error())
+	}
+}
+
+// TestLinuxNonRootBypassedByTargetDir confirms that a custom TargetDir lets
+// non-root users install — needed for --user mode (~/.config/systemd/user).
+func TestLinuxNonRootBypassedByTargetDir(t *testing.T) {
 	opts := Options{
 		BinaryPath: "/usr/local/bin/marc",
 		ConfigPath: "/home/user/.marc/config.toml",
@@ -343,12 +366,24 @@ func TestLinuxNonRootRejected(t *testing.T) {
 	}
 	captureOutput(&opts)
 
-	err := installSystemd(context.Background(), opts)
-	if err == nil {
-		t.Fatal("expected error for non-root, got nil")
+	if err := installSystemd(context.Background(), opts); err != nil {
+		t.Fatalf("non-root with custom TargetDir: unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "requires root") {
-		t.Errorf("error %q missing 'requires root'", err.Error())
+}
+
+// TestLinuxNonRootDryRunBypassed confirms that --dry-run skips the root gate
+// — printing templates should never need privileges.
+func TestLinuxNonRootDryRunBypassed(t *testing.T) {
+	opts := Options{
+		BinaryPath: "/usr/local/bin/marc",
+		ConfigPath: "/home/user/.marc/config.toml",
+		DryRun:     true,
+		geteuid:    func() int { return 1000 }, // non-root
+	}
+	captureOutput(&opts)
+
+	if err := installSystemd(context.Background(), opts); err != nil {
+		t.Fatalf("non-root with --dry-run: unexpected error: %v", err)
 	}
 }
 

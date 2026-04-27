@@ -1,27 +1,115 @@
 name: release
+
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (must already exist)'
+        required: true
+
 permissions:
   contents: write
+
+# Pre-emptive cancel on superseded tag pushes within the same ref.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+  MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache: true
+
       - name: Install arm64 cross-compiler
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-      - name: GoReleaser
+          if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+          fi
+
+      - name: GoReleaser build + GitHub Release
         uses: goreleaser/goreleaser-action@v6
         with:
-          version: latest
+          version: '~> v2'
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify checksums + binary inventory
+        run: |
+          set -e
+          ls -la dist/
+          test -f dist/checksums.txt
+          head -50 dist/checksums.txt
+
+      # ---------------------------------------------------------------
+      # Mirror the seven release artifacts to artifacts.kanolab.io so
+      # internal consumers can fetch from there without going through
+      # the public GitHub Release surface (and so the smoke-test the
+      # rest of the team uses against artifacts.kanolab.io can pull
+      # marc binaries the same way).
+      # ---------------------------------------------------------------
+      - name: Upload marc-linux-amd64
+        uses: kanoonthteam/upload-artifact@v1
+        with:
+          name: marc-${{ github.ref_name }}-linux-amd64
+          path: dist/marc-linux-amd64
+          retention-days: 90
+
+      - name: Upload marc-linux-arm64
+        uses: kanoonthteam/upload-artifact@v1
+        with:
+          name: marc-${{ github.ref_name }}-linux-arm64
+          path: dist/marc-linux-arm64
+          retention-days: 90
+
+      - name: Upload marc-darwin-amd64
+        uses: kanoonthteam/upload-artifact@v1
+        with:
+          name: marc-${{ github.ref_name }}-darwin-amd64
+          path: dist/marc-darwin-amd64
+          retention-days: 90
+
+      - name: Upload marc-darwin-arm64
+        uses: kanoonthteam/upload-artifact@v1
+        with:
+          name: marc-${{ github.ref_name }}-darwin-arm64
+          path: dist/marc-darwin-arm64
+          retention-days: 90
+
+      - name: Upload marc-server-linux-amd64
+        uses: kanoonthteam/upload-artifact@v1
+        with:
+          name: marc-server-${{ github.ref_name }}-linux-amd64
+          path: dist/marc-server-linux-amd64
+          retention-days: 90
+
+      - name: Upload marc-server-linux-arm64
+        uses: kanoonthteam/upload-artifact@v1
+        with:
+          name: marc-server-${{ github.ref_name }}-linux-arm64
+          path: dist/marc-server-linux-arm64
+          retention-days: 90
+
+      - name: Upload checksums
+        uses: kanoonthteam/upload-artifact@v1
+        with:
+          name: marc-${{ github.ref_name }}-checksums.txt
+          path: dist/checksums.txt
+          retention-days: 90

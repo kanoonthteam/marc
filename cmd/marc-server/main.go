@@ -1,10 +1,20 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
+
+	"github.com/caffeaun/marc/internal/config"
+	"github.com/caffeaun/marc/internal/configure/server"
+	"github.com/caffeaun/marc/internal/generate"
+	"github.com/caffeaun/marc/internal/initdb"
+	"github.com/caffeaun/marc/internal/install"
+	"github.com/caffeaun/marc/internal/process"
 )
 
 // version and commit are set at build time via
@@ -44,7 +54,6 @@ func init() {
 	rootCmd.AddCommand(
 		processCmd,
 		generateCmd,
-		botCmd,
 		configureCmd,
 		installCmd,
 		initCmd,
@@ -66,9 +75,19 @@ var processCmd = &cobra.Command{
 	Long: `process is the server ingest daemon.
 It polls MinIO every 60 seconds for new raw capture objects, denoises
 each event via Ollama, and inserts the results into ClickHouse.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintln(os.Stderr, "marc-server process: not implemented")
-		os.Exit(0)
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.LoadServer(configFile)
+		if err != nil {
+			return fmt.Errorf("process: load config: %w", err)
+		}
+
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		return process.Run(ctx, process.Options{
+			Config: cfg,
+		})
 	},
 }
 
@@ -79,21 +98,19 @@ var generateCmd = &cobra.Command{
 invokes claude -p to produce candidate questions, filters by quality scores,
 and inserts survivors into the SQLite pending_questions table.
 Intended to run hourly via systemd timer.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintln(os.Stderr, "marc-server generate: not implemented")
-		os.Exit(0)
-	},
-}
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.LoadServer(configFile)
+		if err != nil {
+			return fmt.Errorf("generate: load config: %w", err)
+		}
 
-var botCmd = &cobra.Command{
-	Use:   "bot",
-	Short: "Run the Telegram bot and question-delivery scheduler",
-	Long: `bot starts the Telegram long-poll loop and a gocron scheduler
-that sends the oldest ready question to the configured Telegram chat
-every 30 minutes during working hours (Asia/Bangkok timezone).`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintln(os.Stderr, "marc-server bot: not implemented")
-		os.Exit(0)
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		return generate.Run(ctx, generate.Options{
+			Config: cfg,
+		})
 	},
 }
 
@@ -109,10 +126,17 @@ var configureCmd = &cobra.Command{
 	Long: `configure runs an interactive wizard that prompts for MinIO,
 ClickHouse, Ollama, Telegram, and scheduler settings, writes
 /etc/marc/server.toml with mode 0600, and validates all four services
-via their Ping() methods.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintln(os.Stderr, "marc-server configure: not implemented")
-		os.Exit(0)
+via their Ping() methods.
+
+Use --check to validate an existing config without any interactive prompts.
+Use --print-default to print the default TOML template to stdout.`,
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return server.Run(cmd.Context(), server.Options{
+			Path:         configFile,
+			Check:        configureCheck,
+			PrintDefault: configurePrintDefault,
+		})
 	},
 }
 
@@ -121,7 +145,7 @@ func init() {
 		&configureCheck,
 		"check",
 		false,
-		"validate existing /etc/marc/server.toml without writing; exit 1 on invalid",
+		"validate existing server.toml without writing; exit 1 on invalid",
 	)
 	configureCmd.Flags().BoolVar(
 		&configurePrintDefault,
@@ -144,9 +168,12 @@ var installCmd = &cobra.Command{
 marc-generate.service, and marc-generate.timer to /etc/systemd/system/,
 runs daemon-reload, then enables and starts each unit.
 Requires root. Linux only.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintln(os.Stderr, "marc-server install: not implemented")
-		os.Exit(0)
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return install.RunServer(cmd.Context(), install.ServerOptions{
+			Uninstall: installUninstall,
+			DryRun:    installDryRun,
+		})
 	},
 }
 
@@ -174,9 +201,17 @@ var initCmd = &cobra.Command{
 	Long: `init applies the ClickHouse DDL (CREATE DATABASE marc, CREATE TABLE
 marc.events) and creates the SQLite state.db with all required tables,
 pragmas, and seed rows. Safe to re-run — all statements use IF NOT EXISTS.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintln(os.Stderr, "marc-server init: not implemented")
-		os.Exit(0)
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.LoadServer(configFile)
+		if err != nil {
+			return fmt.Errorf("init: load config: %w", err)
+		}
+		return initdb.Run(cmd.Context(), initdb.Options{
+			Config: cfg,
+			Check:  initCheck,
+			Out:    os.Stdout,
+		})
 	},
 }
 
