@@ -161,12 +161,34 @@ func Run(ctx context.Context, opts Options) error {
 	// --- 4. Build prompt ---
 	prompt := questionGenPrompt()
 
+	// Active-learning feedback channel: append the user's most recent skipped
+	// questions as anti-examples (the user marked them low quality) and the
+	// most recent answered ones as positive examples. This nudges future
+	// generations toward the user's actual quality bar without requiring a
+	// new UI surface — Skip on Telegram already produces the negative signal.
+	const feedbackLimit = 8
+	skipped, _ := db.GetRecentByStatus(ctx, "skipped", feedbackLimit)
+	answered, _ := db.GetRecentByStatus(ctx, "answered", feedbackLimit)
+	if len(skipped) > 0 || len(answered) > 0 {
+		fbJSON, err := json.Marshal(map[string]any{
+			"skipped_examples":  shapeFeedbackExamples(skipped),
+			"answered_examples": shapeFeedbackExamples(answered),
+		})
+		if err == nil {
+			prompt = prompt + "\n\n## User feedback on prior questions\n\n" +
+				"Below is JSON containing the most recent questions the user has skipped " +
+				"(low-quality / fabricated / off-topic — DO NOT generate more like these) " +
+				"and answered (the user found these worth their time — match this quality bar):\n\n" +
+				string(fbJSON)
+		}
+	}
+
 	// Serialize events as a JSON array appended to the prompt.
 	eventsJSON, err := json.Marshal(rows)
 	if err != nil {
 		return fmt.Errorf("generate: marshal events: %w", err)
 	}
-	prompt = prompt + "\n\n" + string(eventsJSON)
+	prompt = prompt + "\n\n## Source events\n\n" + string(eventsJSON)
 
 	// --- 5. Invoke claude -p ---
 	//
@@ -320,6 +342,24 @@ func Run(ctx context.Context, opts Options) error {
 // runClaude executes the real `claude -p --output-format json` subprocess,
 // passing prompt on stdin and env as the process environment.
 // It enforces a 600-second timeout via the context.
+// shapeFeedbackExamples projects PendingQuestion rows down to just the fields
+// that matter for prompt feedback — situation, question, options, principle —
+// stripping internal IDs, scores, timestamps, and other tracking-only fields
+// that would just inflate token cost and confuse the model.
+func shapeFeedbackExamples(qs []sqlitedb.PendingQuestion) []map[string]any {
+	out := make([]map[string]any, 0, len(qs))
+	for _, q := range qs {
+		out = append(out, map[string]any{
+			"situation":        q.Situation,
+			"question":         q.Question,
+			"option_a":         q.OptionA,
+			"option_b":         q.OptionB,
+			"principle_tested": q.PrincipleTested,
+		})
+	}
+	return out
+}
+
 func runClaude(ctx context.Context, binary, prompt string, env []string) (stdout, stderr []byte, err error) {
 	// Apply a hard 600-second timeout on top of whatever the caller's ctx has.
 	ctx, cancel := context.WithTimeout(ctx, 600*time.Second)

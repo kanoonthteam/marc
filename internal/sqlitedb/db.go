@@ -377,6 +377,46 @@ func (d *DB) GetNextReadyQuestion(ctx context.Context) (*PendingQuestion, error)
 	return pq, nil
 }
 
+// GetRecentByStatus returns the N most-recent pending_questions rows whose
+// status matches. Used by the question generator to feed prior user feedback
+// (skipped = anti-examples, answered = positive examples) back into the
+// claude -p prompt so future generations match the user's quality bar.
+//
+// Order: most recent first (by sent_at when present, otherwise generated_at).
+func (d *DB) GetRecentByStatus(ctx context.Context, status string, limit int) ([]PendingQuestion, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	const q = `SELECT
+	    question_id, project_id, seed_event_id, retrieved_event_ids,
+	    situation, question, option_a, option_b,
+	    principle_tested, durability_score, obviousness_score,
+	    status, generated_at,
+	    sent_at, answered_at, telegram_message_id, answer_event_id
+	FROM pending_questions
+	WHERE status = ?
+	ORDER BY COALESCE(sent_at, generated_at) DESC
+	LIMIT ?`
+	rows, err := d.db.QueryContext(ctx, q, status, limit)
+	if err != nil {
+		return nil, fmt.Errorf("sqlitedb: GetRecentByStatus(%q): %w", status, err)
+	}
+	defer rows.Close()
+
+	var out []PendingQuestion
+	for rows.Next() {
+		pq, err := scanPendingQuestion(rows)
+		if err != nil {
+			return nil, fmt.Errorf("sqlitedb: GetRecentByStatus(%q) scan: %w", status, err)
+		}
+		out = append(out, *pq)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("sqlitedb: GetRecentByStatus(%q) iterate: %w", status, err)
+	}
+	return out, nil
+}
+
 // UpdateQuestionGenCursor writes ts as the new last_event_ts for the singleton
 // cursor row (id = 1). It is called after each successful generation cycle to
 // record the timestamp of the newest event that was processed.
