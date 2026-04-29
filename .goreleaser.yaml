@@ -49,7 +49,5 @@ archives:
     name_template: 'marc-server-{{ .Os }}-{{ .Arch }}'
 checksum:
   name_template: 'checksums.txt'
-release:
-  github:
-    owner: caffeaun
-    name: marc
+# release: defaults to the repository GoReleaser is running in
+# (kanoonthteam/marc), driven by $GITHUB_REPOSITORY.
