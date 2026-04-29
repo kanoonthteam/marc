@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -178,13 +179,55 @@ type daemon struct {
 	machine      string
 }
 
-// tick runs one full poll cycle: crash recovery, then process new objects.
+// tick runs one full poll cycle: crash recovery, then process new objects
+// from every machine that has ever shipped to the bucket. marc is designed
+// for multi-machine capture (one server consumes from every client's prefix);
+// scoping to d.machine alone would silently drop everyone else's events.
 func (d *daemon) tick(ctx context.Context) {
 	// Step 1: crash recovery — clean stale staging files older than this cycle.
 	d.cleanStagingFiles(ctx)
 
-	// Step 2: process new objects for this machine.
-	d.processMachine(ctx, d.machine)
+	// Step 2: discover every machine that has shipped under raw/, then process
+	// each one in turn. processMachine has its own per-machine cursor, so two
+	// clients never race on the same prefix.
+	machines, err := d.listMachines(ctx)
+	if err != nil {
+		d.logger.Error("process: discover machines", slog.Any("error", err))
+		return
+	}
+	for _, m := range machines {
+		if ctx.Err() != nil {
+			return
+		}
+		d.processMachine(ctx, m)
+	}
+}
+
+// listMachines lists distinct machine names that have at least one object
+// under raw/<machine>/ in MinIO. Returns names in stable lexicographic order.
+func (d *daemon) listMachines(ctx context.Context) ([]string, error) {
+	keys, err := d.mc.ListObjects(ctx, "raw/", "")
+	if err != nil {
+		return nil, fmt.Errorf("list raw/: %w", err)
+	}
+	seen := make(map[string]struct{}, 4)
+	machines := make([]string, 0, 4)
+	for _, k := range keys {
+		// raw/<machine>/<rest>
+		rest := strings.TrimPrefix(k, "raw/")
+		i := strings.IndexByte(rest, '/')
+		if i <= 0 {
+			continue
+		}
+		m := rest[:i]
+		if _, ok := seen[m]; ok {
+			continue
+		}
+		seen[m] = struct{}{}
+		machines = append(machines, m)
+	}
+	sort.Strings(machines)
+	return machines, nil
 }
 
 // cleanStagingFiles removes any leftover staging files from a prior crashed cycle.
@@ -412,8 +455,11 @@ func (d *daemon) processJSONL(ctx context.Context, path string, skippedInternal,
 			return fmt.Errorf("denoise event %s: %w", ev.EventID, err)
 		}
 
-		// Build ClickHouse event.
-		chEvent := buildEvent(ev, dr, d.machine, d.denoiseModel)
+		// Build ClickHouse event. Machine is read from ev.Machine (set by
+		// the originating proxy) — not d.machine — so MacBook events stay
+		// tagged "macbook-..." instead of being relabelled with the server's
+		// hostname.
+		chEvent := buildEvent(ev, dr, d.denoiseModel)
 
 		// ClickHouse ReplacingMergeTree dedupes by sort key during background merges,
 		// not on INSERT. If this processor crashes mid-batch (some inserts succeeded,

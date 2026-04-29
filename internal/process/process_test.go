@@ -380,6 +380,79 @@ func TestOllamaFailureHaltsBatch(t *testing.T) {
 	}
 }
 
+// TestTickProcessesAllMachinesNotJustSelf reproduces the production bug
+// where marc-process running on Ubuntu only polled raw/<own-host>/ and
+// silently ignored objects shipped from other machines (e.g., MacBook).
+// After the fix tick() iterates every machine prefix found under raw/.
+func TestTickProcessesAllMachinesNotJustSelf(t *testing.T) {
+	t.Parallel()
+
+	db := openTempDB(t)
+	mc := minioclient.NewFake()
+	ch := &fakeClickHouse{}
+	ol := &fakeOllama{}
+
+	// Drop one object under each of two different machine prefixes. The
+	// daemon's own d.machine is "ubuntu-server" — neither key uses that.
+	putJSONL(t, mc, "raw/macbook-suwijak/2026/04/29/10/batch.jsonl",
+		[]map[string]any{captureEvent("evt-mac-1", false)})
+	putJSONL(t, mc, "raw/another-host/2026/04/29/10/batch.jsonl",
+		[]map[string]any{captureEvent("evt-other-1", false)})
+
+	d := makeDaemon(t, db, mc, ch, ol)
+	d.machine = "ubuntu-server" // override — process should still find both.
+	d.tick(context.Background())
+
+	if got := len(ch.Events()); got != 2 {
+		t.Errorf("clickhouse events = %d, want 2 (one from each machine prefix)", got)
+	}
+
+	// Both per-machine cursors should have advanced.
+	for _, m := range []string{"macbook-suwijak", "another-host"} {
+		cur, err := db.GetCursor(context.Background(), m)
+		if err != nil {
+			t.Errorf("GetCursor(%s): %v", m, err)
+			continue
+		}
+		if cur == "" {
+			t.Errorf("cursor for %s did not advance — tick() did not process this machine", m)
+		}
+	}
+}
+
+// TestBuildEventUsesRawMachineNotServerHostname verifies that the ClickHouse
+// row's machine column is the proxy's machine_name (carried through the
+// JSONL event), not whatever host the processor happens to be running on.
+// Without this, every captured event from MacBook would be mis-attributed
+// to the server in analytics.
+func TestBuildEventUsesRawMachineNotServerHostname(t *testing.T) {
+	t.Parallel()
+
+	db := openTempDB(t)
+	mc := minioclient.NewFake()
+	ch := &fakeClickHouse{}
+	ol := &fakeOllama{}
+
+	// Event was captured by a MacBook proxy and written into the JSONL with
+	// machine = "macbook-suwijak". The processor runs on "ubuntu-server".
+	macEvent := captureEvent("evt-1", false)
+	macEvent["machine"] = "macbook-suwijak"
+	putJSONL(t, mc, "raw/macbook-suwijak/2026/04/29/10/batch.jsonl", []map[string]any{macEvent})
+
+	d := makeDaemon(t, db, mc, ch, ol)
+	d.machine = "ubuntu-server"
+	d.tick(context.Background())
+
+	events := ch.Events()
+	if len(events) != 1 {
+		t.Fatalf("want 1 event, got %d", len(events))
+	}
+	if events[0].Machine != "macbook-suwijak" {
+		t.Errorf("ClickHouse machine = %q, want %q (must come from raw event, not server hostname)",
+			events[0].Machine, "macbook-suwijak")
+	}
+}
+
 // TestPoisonPillSkippedCursorAdvances verifies that when one event in a
 // JSONL object causes Ollama to return ErrUnparseableModelOutput, the
 // processor SKIPS that event, processes the remaining events normally,

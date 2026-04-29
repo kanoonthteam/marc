@@ -74,7 +74,13 @@ func hashFirst64(s string) string {
 
 // buildEvent converts a raw CaptureEvent and its DenoiseResult into a
 // clickhouse.Event ready for insertion.
-func buildEvent(raw jsonl.CaptureEvent, dr *ollama.DenoiseResult, machine, denoiseModel string) clickhouse.Event {
+//
+// The Machine field is taken from raw.Machine (set by the originating
+// proxy on capture) — NOT from the server's hostname. In a multi-machine
+// setup the server processes events from many client hosts and each row
+// must carry its true source for analytics.
+func buildEvent(raw jsonl.CaptureEvent, dr *ollama.DenoiseResult, denoiseModel string) clickhouse.Event {
+	machine := raw.Machine
 	eventID, err := uuid.Parse(raw.EventID)
 	if err != nil {
 		// Generate a new UUID v4 if the stored one is unparseable.
