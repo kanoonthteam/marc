@@ -38,6 +38,11 @@ type Config struct {
 
 	// Version is the marc binary version, surfaced via /_marc/health.
 	Version string
+
+	// Listener, when non-nil, takes precedence over ListenAddr. Self-tests
+	// pre-bind to an ephemeral port and pass the listener so they can read
+	// the kernel-assigned address before the server starts serving.
+	Listener net.Listener
 }
 
 // overflowDrops counts events dropped because the channel was full.
@@ -82,7 +87,6 @@ func Run(ctx context.Context, cfg Config) error {
 	h := newHandler(cfg, eventCh)
 
 	srv := &http.Server{
-		Addr:         cfg.ListenAddr,
 		Handler:      h,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 5 * time.Minute, // SSE streams can be long
@@ -94,12 +98,23 @@ func Run(ctx context.Context, cfg Config) error {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		slog.Info("proxy listening",
-			slog.String("addr", cfg.ListenAddr),
-			slog.String("upstream", cfg.UpstreamURL),
-		)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverErr <- err
+		var serveErr error
+		if cfg.Listener != nil {
+			slog.Info("proxy listening",
+				slog.String("addr", cfg.Listener.Addr().String()),
+				slog.String("upstream", cfg.UpstreamURL),
+			)
+			serveErr = srv.Serve(cfg.Listener)
+		} else {
+			srv.Addr = cfg.ListenAddr
+			slog.Info("proxy listening",
+				slog.String("addr", cfg.ListenAddr),
+				slog.String("upstream", cfg.UpstreamURL),
+			)
+			serveErr = srv.ListenAndServe()
+		}
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			serverErr <- serveErr
 		}
 		close(serverErr)
 	}()

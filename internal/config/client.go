@@ -38,14 +38,23 @@ type ClientMinIO struct {
 	VerifyTLS bool   `toml:"verify_tls"`
 }
 
+// ClientAnthropic holds the Anthropic API key used by `marc proxy --self-test`
+// to send a real request through the proxy. The proxy itself does not use
+// this; Claude Code passes its own key in the Authorization header, which the
+// proxy forwards verbatim.
+type ClientAnthropic struct {
+	APIKey string `toml:"api_key"`
+}
+
 // ClientConfig is the top-level configuration for the marc client binary.
 // It is loaded from ~/.marc/config.toml (mode 0600).
 type ClientConfig struct {
-	MachineName string        `toml:"machine_name"`
-	Paths       ClientPaths   `toml:"paths"`
-	Proxy       ClientProxy   `toml:"proxy"`
-	Shipper     ClientShipper `toml:"shipper"`
-	MinIO       ClientMinIO   `toml:"minio"`
+	MachineName string          `toml:"machine_name"`
+	Paths       ClientPaths     `toml:"paths"`
+	Proxy       ClientProxy     `toml:"proxy"`
+	Shipper     ClientShipper   `toml:"shipper"`
+	MinIO       ClientMinIO     `toml:"minio"`
+	Anthropic   ClientAnthropic `toml:"anthropic"`
 }
 
 // LoadClient reads and parses the client config at path.

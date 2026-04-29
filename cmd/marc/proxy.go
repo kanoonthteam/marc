@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/caffeaun/marc/internal/config"
 	"github.com/caffeaun/marc/internal/proxy"
+	"github.com/caffeaun/marc/internal/selftest"
 )
 
 var proxyCmd = &cobra.Command{
@@ -25,7 +27,8 @@ appending a capture event to ~/.marc/capture.jsonl on completion.
 
 Wire it into your shell with:
   export ANTHROPIC_BASE_URL=http://localhost:8082`,
-	RunE: runProxy,
+	SilenceUsage: true,
+	RunE:         runProxy,
 }
 
 func init() {
@@ -34,14 +37,31 @@ func init() {
 		"",
 		"address and port for the proxy to listen on (overrides config)",
 	)
+	proxyCmd.Flags().Bool(
+		"self-test",
+		false,
+		"start the proxy on an ephemeral port, send one Anthropic request through it, "+
+			"verify the response and capture, then exit (0=pass, 1=fail)",
+	)
+	proxyCmd.Flags().String(
+		"self-test-upstream-url",
+		"",
+		"override the upstream URL for --self-test only (used by CI to point at a fake server)",
+	)
 }
 
 func runProxy(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	selfTest, _ := cmd.Flags().GetBool("self-test")
+	if selfTest {
+		return runProxySelfTest(ctx, cmd)
+	}
+
 	// JSON-structured logs to stderr so each request lifecycle line is one
-	// machine-readable record.
+	// machine-readable record. This is what `marc doctor` and journalctl
+	// consumers parse.
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	})))
@@ -64,11 +84,60 @@ func runProxy(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// runProxySelfTest stands up the proxy on an ephemeral port, sends one real
+// request through it, validates the response and capture, and prints a
+// check-mark report. Returns a non-nil error iff the self-test failed,
+// which makes Cobra exit 1.
+func runProxySelfTest(ctx context.Context, cmd *cobra.Command) error {
+	// Debug-only escape hatch: force self-test to fail. Used by the install
+	// rollback demo and integration tests. Never set in normal operation.
+	if os.Getenv("MARC_FORCE_SELF_TEST_FAIL") == "1" {
+		fmt.Fprintln(cmd.OutOrStdout(), "✗ self-test forced to fail (MARC_FORCE_SELF_TEST_FAIL=1)")
+		return fmt.Errorf("self-test forced to fail by MARC_FORCE_SELF_TEST_FAIL")
+	}
+
+	// Suppress the proxy's own JSON request-lifecycle logs so the test
+	// report stays readable. They go to /dev/null for the self-test only.
+	slog.SetDefault(slog.New(slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{
+		Level: slog.LevelError,
+	})))
+
+	cfg, clientCfg, err := loadProxyConfigWithClientCfg(cmd)
+	if err != nil {
+		return err
+	}
+	upstreamOverride, _ := cmd.Flags().GetString("self-test-upstream-url")
+
+	res := selftest.Run(ctx, selftest.Options{
+		Config:           cfg,
+		APIKey:           selftest.LoadAPIKey(clientCfg),
+		UpstreamOverride: upstreamOverride,
+		Stdout:           cmd.OutOrStdout(),
+	})
+
+	if !res.Success {
+		fmt.Fprintf(cmd.ErrOrStderr(),
+			"\nSelf-test FAILED at step: %s\n  Reason: %s\n  Hint:   %s\n",
+			res.FailedStep, res.FailedReason, res.Hint)
+		return fmt.Errorf("self-test failed at %q", res.FailedStep)
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), "\n✓ marc proxy self-test passed.")
+	return nil
+}
+
 // loadProxyConfig builds a proxy.Config by:
 //  1. Attempting to load ~/.marc/config.toml.
 //  2. Applying --listen-addr flag override if provided.
 //  3. Falling back to sensible defaults when config is absent.
 func loadProxyConfig(cmd *cobra.Command) (proxy.Config, error) {
+	cfg, _, err := loadProxyConfigWithClientCfg(cmd)
+	return cfg, err
+}
+
+// loadProxyConfigWithClientCfg is loadProxyConfig but also returns the parsed
+// ClientConfig (or nil) so callers like --self-test can read sections that
+// don't map onto proxy.Config (e.g. [anthropic].api_key).
+func loadProxyConfigWithClientCfg(cmd *cobra.Command) (proxy.Config, *config.ClientConfig, error) {
 	listenFlag, _ := cmd.Flags().GetString("listen-addr")
 
 	// Expand the config file path.
@@ -138,10 +207,10 @@ func loadProxyConfig(cmd *cobra.Command) (proxy.Config, error) {
 
 	// Ensure the capture directory exists.
 	if err := os.MkdirAll(filepath.Dir(proxyCfg.CapturePath), 0o700); err != nil {
-		return proxy.Config{}, fmt.Errorf("proxy: create capture directory: %w", err)
+		return proxy.Config{}, nil, fmt.Errorf("proxy: create capture directory: %w", err)
 	}
 
-	return proxyCfg, nil
+	return proxyCfg, clientCfg, nil
 }
 
 // defaultCapturePath returns ~/.marc/capture.jsonl.
