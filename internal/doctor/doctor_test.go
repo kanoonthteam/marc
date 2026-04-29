@@ -435,6 +435,70 @@ func TestDoctor_MinIOBucketMissing(t *testing.T) {
 	}
 }
 
+// TestCheckLaunchdAgent_AllStates covers the three launchctl states the
+// doctor distinguishes: running, loaded-but-stopped, and not-loaded.
+func TestCheckLaunchdAgent_AllStates(t *testing.T) {
+	cases := []struct {
+		name     string
+		state    string
+		wantSev  Severity
+		wantHint string // substring expected in Detail
+	}{
+		{"running", "running", SevPass, "loaded and running"},
+		{"loaded-stopped", "loaded-stopped", SevFail, "kickstart"},
+		{"not-loaded", "not-loaded", SevFail, "marc install"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := Options{
+				LaunchctlList: func(_ context.Context, _ string) (string, error) {
+					return tc.state, nil
+				},
+			}
+			c := checkLaunchdAgent(context.Background(), opts, "io.marc.proxy")
+			if c.Severity != tc.wantSev {
+				t.Errorf("severity: want %v, got %v", tc.wantSev, c.Severity)
+			}
+			if !strings.Contains(c.Detail, tc.wantHint) {
+				t.Errorf("detail %q should contain %q", c.Detail, tc.wantHint)
+			}
+		})
+	}
+}
+
+// TestDoctor_DarwinUsesLaunchdNotSystemd verifies the platform switch:
+// when Goos = "darwin" the run includes io.marc.proxy / io.marc.ship checks
+// (not marc-proxy.service / marc-ship.service).
+func TestDoctor_DarwinUsesLaunchdNotSystemd(t *testing.T) {
+	opts, _ := healthyOpts(t)
+	opts.Goos = "darwin"
+	opts.LaunchctlList = func(_ context.Context, _ string) (string, error) {
+		return "running", nil
+	}
+
+	res := Run(context.Background(), opts)
+
+	if got := res.ExitCode(); got != 0 {
+		for _, c := range res.Checks {
+			if c.Severity == SevFail {
+				t.Logf("FAIL: %s — %s", c.Name, c.Detail)
+			}
+		}
+		t.Errorf("ExitCode: want 0 on healthy darwin host, got %d", got)
+	}
+
+	// Must include the launchd labels.
+	findCheck(t, res, "io.marc.proxy")
+	findCheck(t, res, "io.marc.ship")
+
+	// Must NOT include the linux systemd unit names.
+	for _, c := range res.Checks {
+		if strings.Contains(c.Name, "marc-proxy.service") || strings.Contains(c.Name, "marc-ship.service") {
+			t.Errorf("darwin run should not include systemd check %q", c.Name)
+		}
+	}
+}
+
 func TestDoctor_PrintFormat(t *testing.T) {
 	res := Result{Checks: []Check{
 		{"alpha", SevPass, ""},

@@ -90,6 +90,14 @@ type Options struct {
 	// nil → runs `systemctl is-active <unit>` for real.
 	SystemctlIsActive func(ctx context.Context, unit string) (string, error)
 
+	// LaunchctlList returns the launchd state for the given label on darwin.
+	// Returns one of "running", "loaded-stopped", "not-loaded". Tests inject
+	// a fake. nil → runs `launchctl list <label>` for real.
+	LaunchctlList func(ctx context.Context, label string) (string, error)
+
+	// Goos overrides runtime.GOOS for tests. Empty string → runtime.GOOS.
+	Goos string
+
 	// DialPort tries to TCP-connect to addr to confirm something is listening.
 	// nil → net.DialTimeout.
 	DialPort func(network, addr string, timeout time.Duration) error
@@ -152,6 +160,33 @@ func (o *Options) systemctlIsActive(ctx context.Context, unit string) (string, e
 	return state, err
 }
 
+func (o *Options) launchctlList(ctx context.Context, label string) (string, error) {
+	if o.LaunchctlList != nil {
+		return o.LaunchctlList(ctx, label)
+	}
+	out, err := exec.CommandContext(ctx, "launchctl", "list", label).CombinedOutput()
+	// launchctl returns non-zero exit when the label isn't loaded.
+	if _, ok := err.(*exec.ExitError); ok {
+		return "not-loaded", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	// Loaded. Look for a "PID" key in the dict-style stdout to decide whether
+	// it's currently running. Stopped agents print no PID line at all.
+	if strings.Contains(string(out), `"PID"`) {
+		return "running", nil
+	}
+	return "loaded-stopped", nil
+}
+
+func (o *Options) goos() string {
+	if o.Goos != "" {
+		return o.Goos
+	}
+	return runtime.GOOS
+}
+
 // Run executes all checks in order and returns a Result. It does NOT print
 // to stdout (the caller decides — see Print).
 func Run(ctx context.Context, opts Options) Result {
@@ -204,13 +239,17 @@ func Run(ctx context.Context, opts Options) Result {
 		add(Check{"ANTHROPIC_BASE_URL env var", SevPass, base})
 	}
 
-	// 5 & 6. Systemd unit states (linux only — on macOS report as warn).
-	if runtime.GOOS == "linux" {
+	// 5 & 6. Daemon supervisor state — systemd on linux, launchd on darwin.
+	switch opts.goos() {
+	case "linux":
 		add(checkSystemdUnit(ctx, opts, "marc-proxy.service"))
 		add(checkSystemdUnit(ctx, opts, "marc-ship.service"))
-	} else {
-		add(Check{"marc-proxy systemd unit", SevWarn, "not applicable on " + runtime.GOOS + " (use launchctl list io.marc.proxy)"})
-		add(Check{"marc-ship systemd unit", SevWarn, "not applicable on " + runtime.GOOS + " (use launchctl list io.marc.ship)"})
+	case "darwin":
+		add(checkLaunchdAgent(ctx, opts, "io.marc.proxy"))
+		add(checkLaunchdAgent(ctx, opts, "io.marc.ship"))
+	default:
+		add(Check{"marc-proxy daemon", SevWarn, "no supervisor check for " + opts.goos()})
+		add(Check{"marc-ship daemon", SevWarn, "no supervisor check for " + opts.goos()})
 	}
 
 	// 7. Port listening.
@@ -269,9 +308,13 @@ func runWithoutConfig(ctx context.Context, opts Options, res *Result) {
 		add(Check{"ANTHROPIC_BASE_URL env var", SevWarn, "set to " + base + " but no config to compare against"})
 	}
 
-	if runtime.GOOS == "linux" {
+	switch opts.goos() {
+	case "linux":
 		add(checkSystemdUnit(ctx, opts, "marc-proxy.service"))
 		add(checkSystemdUnit(ctx, opts, "marc-ship.service"))
+	case "darwin":
+		add(checkLaunchdAgent(ctx, opts, "io.marc.proxy"))
+		add(checkLaunchdAgent(ctx, opts, "io.marc.ship"))
 	}
 
 	add(Check{"proxy port listening", SevWarn, "skipped — no config to determine listen address"})
@@ -293,9 +336,13 @@ func runChecksWithoutCfg(ctx context.Context, opts Options, res *Result) {
 	} else {
 		add(Check{"ANTHROPIC_BASE_URL env var", SevWarn, "set to " + base + " — config could not be parsed to verify"})
 	}
-	if runtime.GOOS == "linux" {
+	switch opts.goos() {
+	case "linux":
 		add(checkSystemdUnit(ctx, opts, "marc-proxy.service"))
 		add(checkSystemdUnit(ctx, opts, "marc-ship.service"))
+	case "darwin":
+		add(checkLaunchdAgent(ctx, opts, "io.marc.proxy"))
+		add(checkLaunchdAgent(ctx, opts, "io.marc.ship"))
 	}
 	add(Check{"proxy port listening", SevWarn, "skipped — config did not parse"})
 	add(Check{"/_marc/health responds ok", SevWarn, "skipped — config did not parse"})
@@ -321,6 +368,25 @@ func checkSystemdUnit(ctx context.Context, opts Options, unit string) Check {
 		return Check{name, SevFail, "failed (check: journalctl -u " + unit + ")"}
 	case "not-installed", "unknown":
 		return Check{name, SevFail, "unit file not present (run: sudo marc install)"}
+	default:
+		return Check{name, SevWarn, "state=" + state}
+	}
+}
+
+func checkLaunchdAgent(ctx context.Context, opts Options, label string) Check {
+	state, err := opts.launchctlList(ctx, label)
+	name := label + " state"
+	if err != nil {
+		return Check{name, SevFail, "could not query launchctl: " + err.Error()}
+	}
+	switch state {
+	case "running":
+		return Check{name, SevPass, "loaded and running"}
+	case "loaded-stopped":
+		return Check{name, SevFail,
+			"loaded but not running (try: launchctl kickstart -k gui/$(id -u)/" + label + ")"}
+	case "not-loaded":
+		return Check{name, SevFail, "agent not loaded (run: marc install)"}
 	default:
 		return Check{name, SevWarn, "state=" + state}
 	}
