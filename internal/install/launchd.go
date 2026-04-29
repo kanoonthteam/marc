@@ -121,7 +121,17 @@ func installLaunchd(ctx context.Context, opts Options) error {
 	}
 
 	fmt.Fprintf(opts.Stdout, "io.marc.proxy and io.marc.ship LaunchAgents installed and loaded\n")
-	return nil
+
+	// Mirror the systemd post-install gate: run --self-test, roll back on
+	// failure.
+	return runPostInstallGate(ctx, opts, func() {
+		for _, a := range launchdAgents {
+			path := filepath.Join(targetDir, a.fileName)
+			if uerr := runCmd(ctx, "launchctl", "unload", path); uerr != nil {
+				fmt.Fprintf(opts.Stderr, "rollback: launchctl unload %s failed: %v\n", path, uerr)
+			}
+		}
+	})
 }
 
 // uninstallLaunchd unloads and removes launchd plists.

@@ -36,6 +36,10 @@ type Options struct {
 	// SkipLoad suppresses calls to launchctl / systemctl. Used in tests.
 	SkipLoad bool
 
+	// SkipSelfTest, when true, omits the post-install `marc proxy --self-test`
+	// gate. Set by tests and by --skip-load (no daemon to test against).
+	SkipSelfTest bool
+
 	// Stdout and Stderr receive informational and error output.
 	Stdout io.Writer
 	Stderr io.Writer
@@ -43,6 +47,11 @@ type Options struct {
 	// geteuid is injected in tests to simulate non-root on Linux.
 	// Leave nil for production (uses os.Geteuid).
 	geteuid func() int
+
+	// verifyHook overrides the post-install verification step. When nil,
+	// runSelfTestSubprocess is used. Tests inject a fake to assert the gate
+	// without spawning a real binary.
+	verifyHook func(ctx context.Context, opts Options) error
 }
 
 // templateData holds the values interpolated into service unit templates.

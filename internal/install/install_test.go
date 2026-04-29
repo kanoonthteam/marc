@@ -16,11 +16,12 @@ import (
 func rootOpts(t *testing.T) Options {
 	t.Helper()
 	return Options{
-		BinaryPath: "/usr/local/bin/marc",
-		ConfigPath: "/home/user/.marc/config.toml",
-		TargetDir:  t.TempDir(),
-		SkipLoad:   true,
-		geteuid:    func() int { return 0 }, // simulate root
+		BinaryPath:   "/usr/local/bin/marc",
+		ConfigPath:   "/home/user/.marc/config.toml",
+		TargetDir:    t.TempDir(),
+		SkipLoad:     true,
+		SkipSelfTest: true, // covered by dedicated gate tests; default off for unit-file tests
+		geteuid:      func() int { return 0 },
 	}
 }
 
@@ -358,11 +359,12 @@ func TestLinuxNonRootRejected(t *testing.T) {
 // non-root users install — needed for --user mode (~/.config/systemd/user).
 func TestLinuxNonRootBypassedByTargetDir(t *testing.T) {
 	opts := Options{
-		BinaryPath: "/usr/local/bin/marc",
-		ConfigPath: "/home/user/.marc/config.toml",
-		TargetDir:  t.TempDir(),
-		SkipLoad:   true,
-		geteuid:    func() int { return 1000 }, // non-root
+		BinaryPath:   "/usr/local/bin/marc",
+		ConfigPath:   "/home/user/.marc/config.toml",
+		TargetDir:    t.TempDir(),
+		SkipLoad:     true,
+		SkipSelfTest: true, // self-test gate is exercised in verify_test.go
+		geteuid:      func() int { return 1000 }, // non-root
 	}
 	captureOutput(&opts)
 

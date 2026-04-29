@@ -113,7 +113,10 @@ func installSystemd(ctx context.Context, opts Options) error {
 	}
 
 	if opts.SkipLoad {
-		return nil
+		// --user / --skip-load: don't call systemctl. We still run the gate
+		// because the binary itself is what we're validating; the operator
+		// will run `systemctl --user enable --now` afterwards.
+		return runPostInstallGate(ctx, opts, nil)
 	}
 
 	// Reload and enable units.
@@ -132,7 +135,12 @@ func installSystemd(ctx context.Context, opts Options) error {
 	}
 
 	fmt.Fprintf(opts.Stdout, "marc-proxy and marc-ship services installed and started\n")
-	return nil
+
+	// Post-install gate: run `marc proxy --self-test`. If it fails, roll back
+	// the unit so we don't leave a half-broken install on disk.
+	return runPostInstallGate(ctx, opts, func() {
+		rollbackServicesSystemd(ctx, opts)
+	})
 }
 
 // uninstallSystemd stops and removes systemd units.
