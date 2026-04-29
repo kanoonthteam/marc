@@ -61,9 +61,14 @@ func runProxy(cmd *cobra.Command, args []string) error {
 
 	// JSON-structured logs to stderr so each request lifecycle line is one
 	// machine-readable record. This is what `marc doctor` and journalctl
-	// consumers parse.
+	// consumers parse. Set MARC_PROXY_DEBUG=1 to drop to debug level —
+	// useful when investigating slow-streaming or stalled requests.
+	logLevel := slog.LevelInfo
+	if os.Getenv("MARC_PROXY_DEBUG") == "1" {
+		logLevel = slog.LevelDebug
+	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: logLevel,
 	})))
 
 	cfg, err := loadProxyConfig(cmd)

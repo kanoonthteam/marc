@@ -557,6 +557,76 @@ func TestSSEParsing(t *testing.T) {
 	}
 }
 
+// TestSSEDiagnostics verifies the per-stream summary fields used to tell apart
+// "marc is buffering" from "Anthropic is slow-streaming thinking deltas":
+// event_type_counts, first_text_delta_ms, first_thinking_ms.
+func TestSSEDiagnostics(t *testing.T) {
+	// A realistic-shape stream with thinking deltas before text deltas, so
+	// we expect first_thinking_ms < first_text_delta_ms.
+	rawSSE := strings.Join([]string{
+		"event: message_start",
+		`data: {"type":"message_start"}`,
+		"",
+		"event: content_block_start",
+		`data: {"type":"content_block_start","content_block":{"type":"thinking"}}`,
+		"",
+		"event: content_block_delta",
+		`data: {"delta":{"type":"thinking_delta","thinking":"reasoning..."}}`,
+		"",
+		"event: content_block_delta",
+		`data: {"delta":{"type":"thinking_delta","thinking":"more thoughts"}}`,
+		"",
+		"event: content_block_stop",
+		`data: {}`,
+		"",
+		"event: content_block_start",
+		`data: {"type":"content_block_start","content_block":{"type":"text"}}`,
+		"",
+		"event: content_block_delta",
+		`data: {"delta":{"type":"text_delta","text":"Hello"}}`,
+		"",
+		"event: content_block_delta",
+		`data: {"delta":{"type":"text_delta","text":" world"}}`,
+		"",
+		"event: message_stop",
+		`data: {"type":"message_stop"}`,
+		"",
+	}, "\n")
+
+	rec := httptest.NewRecorder()
+	res := streamSSE(rec, strings.NewReader(rawSSE), time.Now())
+
+	// event_type_counts should reflect every line we sent.
+	if got := res.eventTypeCounts["message_start"]; got != 1 {
+		t.Errorf("message_start count = %d, want 1", got)
+	}
+	if got := res.eventTypeCounts["content_block_delta"]; got != 4 {
+		t.Errorf("content_block_delta count = %d, want 4", got)
+	}
+	if got := res.eventTypeCounts["thinking_delta"]; got != 2 {
+		t.Errorf("thinking_delta count = %d, want 2", got)
+	}
+	if got := res.eventTypeCounts["text_delta"]; got != 2 {
+		t.Errorf("text_delta count = %d, want 2", got)
+	}
+	if got := res.eventTypeCounts["message_stop"]; got != 1 {
+		t.Errorf("message_stop count = %d, want 1", got)
+	}
+
+	// In the synthetic stream we ship thinking before text, so both bools
+	// must be set and thinking must fire no later than text.
+	if !res.sawThinking {
+		t.Errorf("sawThinking should be true when thinking_delta is present")
+	}
+	if !res.sawTextDelta {
+		t.Errorf("sawTextDelta should be true when text_delta is present")
+	}
+	if res.firstThinkingMs > res.firstTextDeltaMs {
+		t.Errorf("expected firstThinkingMs (%d) <= firstTextDeltaMs (%d)",
+			res.firstThinkingMs, res.firstTextDeltaMs)
+	}
+}
+
 // --- TestRedactHeaders --------------------------------------------------------
 
 func TestRedactHeaders(t *testing.T) {

@@ -17,6 +17,22 @@ type sseResult struct {
 	totalMs      uint32
 	chunkCount   int
 	sawStop      bool
+
+	// Diagnostics for "is the upstream actually streaming, or is the proxy
+	// adding latency?" The handler logs these as part of the per-request
+	// SSE summary so the operator can compare a direct-to-Anthropic baseline
+	// against the same prompt through marc.
+	eventTypeCounts    map[string]int
+	firstTextDeltaMs   uint32 // ms from streamSSE start to the first content_block_delta of type=text_delta
+	firstThinkingMs    uint32 // ms to the first content_block_delta of type=thinking_delta
+	maxInterChunkGapMs uint32 // longest gap observed between two consecutive scanner.Scan iterations
+
+	// sawTextDelta / sawThinking distinguish "no event of that type ever
+	// arrived" from "first one arrived at t=0ms" (which can happen on tests
+	// running in <1ms or on very fast loopback). The Ms fields above mean
+	// nothing without these.
+	sawTextDelta bool
+	sawThinking  bool
 }
 
 // streamSSE reads an SSE stream from upstream, writes each chunk to w
@@ -31,7 +47,10 @@ func streamSSE(w http.ResponseWriter, body io.Reader, startTime time.Time) sseRe
 
 	var acc bytes.Buffer
 	var result sseResult
+	result.eventTypeCounts = make(map[string]int, 8)
 	var firstChunk bool
+	var pendingEvent string
+	lastChunkTime := startTime
 
 	scanner := bufio.NewScanner(body)
 	// SSE events can be very large (full message content). 8 MB should be
@@ -43,15 +62,14 @@ func streamSSE(w http.ResponseWriter, body io.Reader, startTime time.Time) sseRe
 		acc.Write(line)
 		acc.WriteByte('\n')
 
+		now := time.Now()
 		if !firstChunk {
 			firstChunk = true
-			elapsed := time.Since(startTime)
-			ms := uint64(elapsed.Milliseconds())
-			if ms > uint64(^uint32(0)) {
-				ms = uint64(^uint32(0))
-			}
-			result.firstChunkMs = uint32(ms)
+			result.firstChunkMs = clampMs(now.Sub(startTime))
+		} else if gap := clampMs(now.Sub(lastChunkTime)); gap > result.maxInterChunkGapMs {
+			result.maxInterChunkGapMs = gap
 		}
+		lastChunkTime = now
 		result.chunkCount++
 
 		// Forward line to the client immediately.
@@ -66,21 +84,47 @@ func streamSSE(w http.ResponseWriter, body io.Reader, startTime time.Time) sseRe
 			flusher.Flush()
 		}
 
-		// Detect "event: message_stop" — the canonical end-of-conversation marker.
-		trimmed := strings.TrimSpace(string(line))
-		if trimmed == "event: message_stop" {
-			result.sawStop = true
+		// --- Diagnostics: classify the line so the per-request summary can
+		// distinguish "upstream is sending thinking deltas slowly" from
+		// "upstream sent nothing for 4 minutes". Cheap byte-prefix checks;
+		// no JSON unmarshal on the hot path.
+		switch {
+		case bytes.HasPrefix(line, []byte("event: ")):
+			pendingEvent = strings.TrimSpace(string(line[len("event: "):]))
+			result.eventTypeCounts[pendingEvent]++
+			if pendingEvent == "message_stop" {
+				result.sawStop = true
+			}
+		case bytes.HasPrefix(line, []byte("data: ")) && pendingEvent == "content_block_delta":
+			data := line[len("data: "):]
+			if bytes.Contains(data, []byte(`"type":"text_delta"`)) {
+				if !result.sawTextDelta {
+					result.firstTextDeltaMs = clampMs(now.Sub(startTime))
+					result.sawTextDelta = true
+				}
+				result.eventTypeCounts["text_delta"]++
+			} else if bytes.Contains(data, []byte(`"type":"thinking_delta"`)) {
+				if !result.sawThinking {
+					result.firstThinkingMs = clampMs(now.Sub(startTime))
+					result.sawThinking = true
+				}
+				result.eventTypeCounts["thinking_delta"]++
+			}
 		}
 	}
 
-	elapsed := time.Since(startTime)
-	ms := uint64(elapsed.Milliseconds())
+	result.totalMs = clampMs(time.Since(startTime))
+	result.rawBody = acc.Bytes()
+	return result
+}
+
+// clampMs converts d to a uint32 millisecond value, saturating at math.MaxUint32.
+func clampMs(d time.Duration) uint32 {
+	ms := uint64(d.Milliseconds())
 	if ms > uint64(^uint32(0)) {
 		ms = uint64(^uint32(0))
 	}
-	result.totalMs = uint32(ms)
-	result.rawBody = acc.Bytes()
-	return result
+	return uint32(ms)
 }
 
 // copyNonStreaming reads the full upstream body into a buffer, writes it to w,

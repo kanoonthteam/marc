@@ -197,6 +197,21 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			TotalMs:      res.totalMs,
 			ChunkCount:   res.chunkCount,
 		}
+		// Per-request SSE diagnostic. Lets the operator tell apart
+		// "marc is buffering" from "Anthropic is slow-streaming thinking".
+		// Compare a slow direct-to-Anthropic baseline against the same
+		// prompt through marc — if first_text_delta_ms and event_type_counts
+		// match, the proxy is innocent.
+		log.Info("sse stream summary",
+			slog.Int("chunk_count", res.chunkCount),
+			slog.Int("first_chunk_ms", int(res.firstChunkMs)),
+			slog.Int("first_text_delta_ms", int(res.firstTextDeltaMs)),
+			slog.Int("first_thinking_ms", int(res.firstThinkingMs)),
+			slog.Int("max_inter_chunk_gap_ms", int(res.maxInterChunkGapMs)),
+			slog.Int("total_ms", int(res.totalMs)),
+			slog.Bool("saw_stop", res.sawStop),
+			slog.Any("event_type_counts", res.eventTypeCounts),
+		)
 		if !res.sawStop {
 			log.Debug("proxy: SSE stream ended without message_stop", slog.String("path", r.URL.Path))
 		}
