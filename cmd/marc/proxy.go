@@ -40,6 +40,12 @@ func runProxy(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// JSON-structured logs to stderr so each request lifecycle line is one
+	// machine-readable record.
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+
 	cfg, err := loadProxyConfig(cmd)
 	if err != nil {
 		return err
@@ -99,6 +105,7 @@ func loadProxyConfig(cmd *cobra.Command) (proxy.Config, error) {
 		CapturePath:     defaultCapturePath(),
 		StrippedHeaders: []string{"authorization", "x-api-key", "cookie"},
 		EventChanCap:    256,
+		Version:         version,
 	}
 
 	// Machine name: hostname as fallback.

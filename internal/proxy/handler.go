@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/caffeaun/marc/internal/jsonl"
@@ -18,6 +19,7 @@ type handler struct {
 	upstream  *url.URL
 	eventCh   chan<- jsonl.CaptureEvent
 	transport http.RoundTripper
+	health    *healthState
 }
 
 // newHandler constructs a handler from the given config and event channel.
@@ -29,22 +31,71 @@ func newHandler(cfg Config, eventCh chan<- jsonl.CaptureEvent) *handler {
 		cfg:      cfg,
 		upstream: u,
 		eventCh:  eventCh,
+		health:   newHealthState(),
 	}
+}
+
+// countingResponseWriter wraps an http.ResponseWriter and tracks total bytes
+// written to the client. Flush is forwarded to the underlying writer so SSE
+// streaming continues to flush eagerly.
+type countingResponseWriter struct {
+	http.ResponseWriter
+	bytesWritten atomic.Int64
+}
+
+func (c *countingResponseWriter) Write(b []byte) (int, error) {
+	n, err := c.ResponseWriter.Write(b)
+	if n > 0 {
+		c.bytesWritten.Add(int64(n))
+	}
+	return n, err
+}
+
+func (c *countingResponseWriter) Flush() {
+	if f, ok := c.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (c *countingResponseWriter) BytesWritten() int64 {
+	return c.bytesWritten.Load()
 }
 
 // ServeHTTP satisfies http.Handler.
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// /_marc/* is marc's own surface — short-circuit before any /v1 logic so it
+	// never forwards upstream and never touches the capture file.
+	if r.URL.Path == "/_marc/health" {
+		h.serveHealth(w, r)
+		return
+	}
 	// Only proxy /v1/* paths. Return 404 for anything else.
 	if !strings.HasPrefix(r.URL.Path, "/v1/") {
 		http.NotFound(w, r)
 		return
 	}
 
+	reqStart := time.Now()
+	reqID, idErr := jsonl.NewUUIDv4()
+	if idErr != nil {
+		// crypto/rand failures are essentially impossible on a healthy host;
+		// fall through with a sentinel rather than 500'ing the request.
+		reqID = "no-id"
+	}
+	log := slog.With(slog.String("request_id", reqID))
+	log.Info("request received",
+		slog.String("method", r.Method),
+		slog.String("path", r.URL.Path),
+	)
+
+	cw := &countingResponseWriter{ResponseWriter: w}
+
 	// Read and buffer the request body so we can (a) forward it and (b) capture it.
 	reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Error("proxy: failed to read request body", slog.Any("error", err))
-		http.Error(w, "failed to read request body", http.StatusBadGateway)
+		h.health.recordFailure("read request body: " + err.Error())
+		log.Error("proxy: failed to read request body", slog.Any("error", err))
+		http.Error(cw, "failed to read request body", http.StatusBadGateway)
 		return
 	}
 	_ = r.Body.Close()
@@ -56,8 +107,9 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	upReq, err := http.NewRequestWithContext(r.Context(), r.Method, upURL.String(), bytes.NewReader(reqBody))
 	if err != nil {
-		slog.Error("proxy: failed to build upstream request", slog.Any("error", err))
-		http.Error(w, "upstream request error", http.StatusBadGateway)
+		h.health.recordFailure("build upstream request: " + err.Error())
+		log.Error("proxy: failed to build upstream request", slog.Any("error", err))
+		http.Error(cw, "upstream request error", http.StatusBadGateway)
 		return
 	}
 
@@ -74,10 +126,8 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// to inflate before scanning, and the saved bytes would be opaque to the
 	// downstream denoise step. Bandwidth cost is negligible for our scale.
 	upReq.Header.Del("Accept-Encoding")
-	// Log headers at debug level with sensitive values redacted.
-	slog.Debug("proxy: forwarding request",
-		slog.String("method", r.Method),
-		slog.String("path", r.URL.Path),
+	// Detailed header dump at debug level with sensitive values redacted.
+	log.Debug("proxy: forwarding request headers",
 		slog.Any("headers", redactHeaders(r.Header, h.cfg.StrippedHeaders)),
 	)
 
@@ -86,25 +136,34 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		transport = http.DefaultTransport
 	}
 
+	log.Info("forwarding upstream", slog.String("upstream_url", upURL.String()))
+
 	requestSent := time.Now()
 	resp, err := transport.RoundTrip(upReq)
 	if err != nil {
-		slog.Error("proxy: upstream request failed",
+		h.health.recordFailure("upstream transport: " + err.Error())
+		log.Error("proxy: upstream request failed",
 			slog.String("path", r.URL.Path),
 			slog.Any("error", err),
 		)
-		http.Error(w, "upstream request failed", http.StatusBadGateway)
+		http.Error(cw, "upstream request failed", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
+	upstreamMs := time.Since(requestSent).Milliseconds()
+	log.Info("upstream responded",
+		slog.Int("status", resp.StatusCode),
+		slog.Int64("duration_ms", upstreamMs),
+	)
+
 	// Copy upstream response headers to the client.
 	for k, vals := range resp.Header {
 		for _, v := range vals {
-			w.Header().Add(k, v)
+			cw.Header().Add(k, v)
 		}
 	}
-	w.WriteHeader(resp.StatusCode)
+	cw.WriteHeader(resp.StatusCode)
 
 	// Detect whether this is a streaming (SSE) response.
 	contentType := resp.Header.Get("Content-Type")
@@ -116,7 +175,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if isSSE {
-		res := streamSSE(w, resp.Body, requestSent)
+		res := streamSSE(cw, resp.Body, requestSent)
 		// Reconstruct the non-streaming-shaped response JSON object from the
 		// raw SSE event stream so downstream (denoise / generate) can read
 		// assistant text uniformly. Falls back to the raw bytes (which fail
@@ -125,7 +184,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			responseBody = agg
 		} else {
 			responseBody = res.rawBody
-			slog.Warn("proxy: SSE aggregation produced empty result; response will be null",
+			log.Warn("proxy: SSE aggregation produced empty result; response will be null",
 				slog.Int("raw_body_bytes", len(res.rawBody)),
 				slog.Int("chunk_count", res.chunkCount),
 				slog.Bool("saw_stop", res.sawStop),
@@ -139,13 +198,13 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			ChunkCount:   res.chunkCount,
 		}
 		if !res.sawStop {
-			slog.Debug("proxy: SSE stream ended without message_stop", slog.String("path", r.URL.Path))
+			log.Debug("proxy: SSE stream ended without message_stop", slog.String("path", r.URL.Path))
 		}
 	} else {
 		var firstChunkMs, totalMs uint32
-		responseBody, firstChunkMs, totalMs, err = copyNonStreaming(w, resp.Body, requestSent)
+		responseBody, firstChunkMs, totalMs, err = copyNonStreaming(cw, resp.Body, requestSent)
 		if err != nil {
-			slog.Error("proxy: error copying non-streaming response", slog.Any("error", err))
+			log.Error("proxy: error copying non-streaming response", slog.Any("error", err))
 		}
 		// Non-streaming: we still populate StreamMeta with timing so callers
 		// get consistent data. WasStreamed = false distinguishes them.
@@ -157,10 +216,22 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	totalMs := time.Since(reqStart).Milliseconds()
+	log.Info("response sent",
+		slog.Int("status", resp.StatusCode),
+		slog.Int64("duration_ms", totalMs),
+		slog.Int64("bytes_written", cw.BytesWritten()),
+	)
+
 	// Build and dispatch the capture event AFTER the client has received the
 	// full response. The request goroutine sends to the channel; the writer
 	// goroutine is the only one that calls AppendEvent.
 	upstreamErr := errorFromStatus(resp.StatusCode, responseBody)
+	if upstreamErr != nil {
+		h.health.recordFailure(upstreamErr.Message)
+	} else {
+		h.health.recordSuccess()
+	}
 	ev, buildErr := buildCaptureEvent(
 		reqBody,
 		responseBody,
@@ -171,7 +242,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		upstreamErr,
 	)
 	if buildErr != nil {
-		slog.Error("proxy: failed to build capture event",
+		log.Error("proxy: failed to build capture event",
 			slog.String("path", r.URL.Path),
 			slog.Any("error", buildErr),
 		)

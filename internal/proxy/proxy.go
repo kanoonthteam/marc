@@ -35,6 +35,9 @@ type Config struct {
 	// EventChanCap is the capacity of the event channel between request goroutines
 	// and the single-writer goroutine. Defaults to 256.
 	EventChanCap int
+
+	// Version is the marc binary version, surfaced via /_marc/health.
+	Version string
 }
 
 // overflowDrops counts events dropped because the channel was full.
