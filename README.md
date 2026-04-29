@@ -447,6 +447,37 @@ The systemd unit for `marc-proxy` includes `Restart=on-failure`, so most crash s
 
 ---
 
+## If something goes wrong
+
+The first command to run is **`marc doctor`** — a read-only diagnostic that
+inspects every part of the setup (config file, systemd units, listening port,
+health endpoint, capture file, MinIO) and prints one ✓/⚠/✗ line per check.
+It exits 0 if everything is healthy or only-warning, 1 if any check failed.
+
+```bash
+marc doctor
+```
+
+For the failure modes we've actually seen, plus step-by-step playbooks, see
+[docs/FAILURE-MODES.md](docs/FAILURE-MODES.md). It covers:
+
+- Claude Code shows API errors after enabling marc
+- `marc proxy` starts but doesn't forward
+- Self-test passes but Claude Code still fails
+
+To verify the proxy works without affecting your live setup:
+
+```bash
+marc proxy --self-test
+```
+
+This stands the proxy up on a random port, sends one real Anthropic request
+through it, verifies the response and capture, then exits with check-mark
+output. `marc install` runs the same self-test before declaring success and
+rolls back the systemd units if it fails.
+
+---
+
 ## Subcommand reference
 
 ### `marc` (client binary, all platforms)
@@ -454,9 +485,11 @@ The systemd unit for `marc-proxy` includes `Restart=on-failure`, so most crash s
 | Subcommand | Description |
 |---|---|
 | `marc proxy` | Long-running daemon. HTTPS proxy for the Anthropic API; appends captures to `capture.jsonl`. |
+| `marc proxy --self-test` | Stand up the proxy on an ephemeral port, send one real Anthropic request through it, verify response + capture, exit 0/1. |
 | `marc ship` | Long-running daemon. Polls `capture.jsonl` every 30s; uploads to MinIO when file reaches 5 MB. |
 | `marc configure` | Interactive setup wizard. Writes `~/.marc/config.toml` (mode 0600). Validates MinIO connectivity. |
-| `marc install` | Generates and starts systemd (Linux) or launchd (macOS) service units for proxy and ship. |
+| `marc install` | Generates and starts systemd (Linux) or launchd (macOS) service units for proxy and ship; runs `--self-test` and rolls back on failure. |
+| `marc doctor` | Read-only diagnostic. One ✓/⚠/✗ line per check across config, systemd units, port, `/_marc/health`, capture file, and MinIO. |
 | `marc version` | Prints binary version and commit hash. |
 
 `marc configure` flags: `--check`, `--reset`, `--print-default`, and non-interactive flags `--machine-name`, `--minio-endpoint`, `--minio-access-key`, `--minio-secret-key`, `--bucket`.
