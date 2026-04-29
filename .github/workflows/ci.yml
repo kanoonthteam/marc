@@ -22,8 +22,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
-          cache: true
+          go-version-file: go.mod
+          cache: false  # self-hosted runner already has module cache; cache-save was hanging at 13+ min
 
       - name: vet
         run: go vet ./...
@@ -40,8 +40,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
-          cache: true
+          go-version-file: go.mod
+          cache: false  # self-hosted runner already has module cache; cache-save was hanging at 13+ min
 
       - name: Install arm64 cross-compiler (for parity with release; harmless on amd64)
         run: |
