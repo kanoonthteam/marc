@@ -25,9 +25,13 @@ func NewLineReader(path string) (*LineReader, error) {
 	}
 
 	scanner := bufio.NewScanner(f)
-	// Large buffer: JSONL events with full Anthropic request/response bodies can
-	// reach 200 KB. We set an initial buffer of 256 KB and a maximum of 1 MB.
-	scanner.Buffer(make([]byte, 1024*256), 1024*1024)
+	// Large buffer: a captured Anthropic event holds the full request and the
+	// full SSE-aggregated response. Long tool-use streams or code-heavy
+	// completions easily exceed 1 MB — observed 1.7 MB on the Ubuntu host
+	// while debugging the marc-process backlog. Match the proxy's own SSE
+	// scan ceiling (8 MB in internal/proxy/sse.go) plus headroom so the two
+	// can't drift; if the proxy ever lifts its cap, raise this together.
+	scanner.Buffer(make([]byte, 1024*256), 16*1024*1024)
 
 	return &LineReader{f: f, scanner: scanner}, nil
 }

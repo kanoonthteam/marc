@@ -517,3 +517,53 @@ func TestLineReaderMultipleEvents(t *testing.T) {
 		t.Errorf("expected io.EOF after last event, got %v", err)
 	}
 }
+
+// TestLineReaderHandlesLargeLines verifies that JSONL lines up to several
+// MB are read without bufio.Scanner: token-too-long errors. Reproduces a
+// production failure where one event's response field exceeded 1 MB and
+// halted marc-process indefinitely.
+func TestLineReaderHandlesLargeLines(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "huge.jsonl")
+
+	// Build a CaptureEvent whose response body is ~3 MB. AppendEvent uses
+	// json.Marshal so the line on disk is at least that big, comfortably
+	// over the old 1 MB limit but well under the new 16 MB ceiling.
+	huge := make([]byte, 0, 3*1024*1024+64)
+	huge = append(huge, `{"big":"`...)
+	for i := 0; i < 3*1024*1024; i++ {
+		huge = append(huge, 'x')
+	}
+	huge = append(huge, `"}`...)
+
+	ev := CaptureEvent{
+		EventID:    "12345678-1234-4567-8901-123456789012",
+		Machine:    "huge-test",
+		CapturedAt: time.Now().UTC(),
+		Source:     "anthropic_api",
+		Request:    json.RawMessage(`{"n":1}`),
+		Response:   json.RawMessage(huge),
+	}
+	if err := AppendEvent(path, ev); err != nil {
+		t.Fatalf("AppendEvent: %v", err)
+	}
+
+	lr, err := NewLineReader(path)
+	if err != nil {
+		t.Fatalf("NewLineReader: %v", err)
+	}
+	defer lr.Close()
+
+	raw, err := lr.Next()
+	if err != nil {
+		t.Fatalf("Next on >3 MB line: %v (must not be 'token too long')", err)
+	}
+	if len(raw) < 3*1024*1024 {
+		t.Errorf("read line is only %d bytes; expected >3 MB", len(raw))
+	}
+
+	if _, err := lr.Next(); err != io.EOF {
+		t.Errorf("expected io.EOF after the single huge line, got %v", err)
+	}
+}
