@@ -342,6 +342,56 @@ func TestDenoise_MalformedInnerJSON(t *testing.T) {
 	}
 }
 
+// TestDenoise_MalformedInnerJSON_ReturnsSentinel verifies that the inner-JSON
+// failure path returns ErrUnparseableModelOutput so the processor can detect
+// the poison-pill case via errors.Is and skip-and-continue.
+func TestDenoise_MalformedInnerJSON_ReturnsSentinel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Empty model output — this is the exact bug we hit on Ubuntu with
+		// qwen3:30b returning "" for one event in a backlog.
+		_, _ = fmt.Fprint(w, `{"response":""}`)
+	}))
+	defer srv.Close()
+
+	c := newClient(srv.URL)
+	defer c.Close()
+
+	_, err := c.Denoise(context.Background(), "qwen3:30b-a3b", "event-with-bad-output")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, ollama.ErrUnparseableModelOutput) {
+		t.Errorf("want errors.Is(err, ErrUnparseableModelOutput) == true; got %v", err)
+	}
+	// The error message should also include a truncated raw-response prefix
+	// so operators can see what the model actually produced.
+	if !strings.Contains(err.Error(), "raw response prefix") {
+		t.Errorf("error should include raw response prefix for diagnosis, got %q", err.Error())
+	}
+}
+
+// TestDenoise_MalformedOuterJSON_DoesNotReturnSentinel verifies that a
+// broken outer envelope (different failure mode — Ollama itself misbehaving)
+// is NOT classified as a poison pill. The processor must keep halting on
+// these so a transient Ollama issue gets retried.
+func TestDenoise_MalformedOuterJSON_DoesNotReturnSentinel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, "not json at all")
+	}))
+	defer srv.Close()
+
+	c := newClient(srv.URL)
+	defer c.Close()
+
+	_, err := c.Denoise(context.Background(), "m", "event")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if errors.Is(err, ollama.ErrUnparseableModelOutput) {
+		t.Errorf("outer-envelope failure should NOT be classified as poison pill; got %v", err)
+	}
+}
+
 // TestErrorDistinction verifies that a timeout error and a connection-refused
 // error are distinguishable as different message types (AC #3).
 func TestErrorDistinction(t *testing.T) {

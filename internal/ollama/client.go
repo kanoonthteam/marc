@@ -23,6 +23,16 @@ import (
 
 const defaultTimeout = 120 * time.Second
 
+// ErrUnparseableModelOutput is returned by Denoise when the upstream returned
+// HTTP 200 but the model's text body could not be parsed as a DenoiseResult
+// JSON object — typically because qwen returned an empty or truncated string.
+//
+// This is a deterministic per-event failure: retrying the same input will
+// almost certainly produce the same broken output. Callers (specifically
+// internal/process) use errors.Is to detect this case so they can skip the
+// event and continue draining the batch instead of halting the whole pipeline.
+var ErrUnparseableModelOutput = errors.New("ollama: model output is not valid DenoiseResult JSON")
+
 // DenoiseResult holds the structured output from Ollama after the LLM has
 // processed a raw capture event through the denoise prompt.
 type DenoiseResult struct {
@@ -134,10 +144,21 @@ func (c *ollamaClient) Denoise(ctx context.Context, model, rawEvent string) (*De
 
 	var result DenoiseResult
 	if err := json.Unmarshal([]byte(outer.Response), &result); err != nil {
-		return nil, fmt.Errorf("ollama: unmarshal DenoiseResult from model output: %w", err)
+		// Wrap with the sentinel so callers can errors.Is and skip the event
+		// without halting the whole batch. Truncate the raw body in the error
+		// message so a poison-pill event doesn't dump megabytes into logs.
+		return nil, fmt.Errorf("%w: %v (raw response prefix: %q)",
+			ErrUnparseableModelOutput, err, truncateForError(outer.Response, 200))
 	}
 
 	return &result, nil
+}
+
+func truncateForError(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "...(truncated)"
 }
 
 // tagsResponse is the JSON body returned by GET /api/tags.

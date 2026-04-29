@@ -31,12 +31,24 @@ type fakeOllama struct {
 	callCount int
 	result    *ollama.DenoiseResult
 	err       error
+	// errOnEventID, when non-nil, returns the given error only for the named
+	// event_id; other events get the default success result. Used to test
+	// poison-pill skip-and-continue behavior.
+	errOnEventID map[string]error
 }
 
-func (f *fakeOllama) Denoise(_ context.Context, _, _ string) (*ollama.DenoiseResult, error) {
+func (f *fakeOllama) Denoise(_ context.Context, _, rawEvent string) (*ollama.DenoiseResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.callCount++
+	if len(f.errOnEventID) > 0 {
+		// Cheap way to find the event_id without re-parsing properly.
+		for id, e := range f.errOnEventID {
+			if strings.Contains(rawEvent, `"event_id":"`+id+`"`) {
+				return nil, e
+			}
+		}
+	}
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -365,6 +377,90 @@ func TestOllamaFailureHaltsBatch(t *testing.T) {
 
 	if got := len(ch.Events()); got != 0 {
 		t.Errorf("clickhouse events = %d, want 0", got)
+	}
+}
+
+// TestPoisonPillSkippedCursorAdvances verifies that when one event in a
+// JSONL object causes Ollama to return ErrUnparseableModelOutput, the
+// processor SKIPS that event, processes the remaining events normally,
+// archives the object, and advances the cursor. Without this behavior the
+// pipeline would halt indefinitely on a single bad event.
+func TestPoisonPillSkippedCursorAdvances(t *testing.T) {
+	t.Parallel()
+
+	db := openTempDB(t)
+	mc := minioclient.NewFake()
+	ch := &fakeClickHouse{}
+	ol := &fakeOllama{
+		errOnEventID: map[string]error{
+			"event-poison": fmt.Errorf("denoise: %w: empty response", ollama.ErrUnparseableModelOutput),
+		},
+	}
+
+	key := "raw/test-machine/2026/04/27/07/poison.jsonl"
+	putJSONL(t, mc, key, []map[string]any{
+		captureEvent("event-good-1", false),
+		captureEvent("event-poison", false),
+		captureEvent("event-good-2", false),
+	})
+
+	d := makeDaemon(t, db, mc, ch, ol)
+	d.processMachine(context.Background(), "test-machine")
+
+	// All three events should have been attempted (one failed-and-skipped).
+	if got := ol.CallCount(); got != 3 {
+		t.Errorf("ollama call count = %d, want 3 (all events attempted)", got)
+	}
+	// The two good events should have made it into ClickHouse; the poison one shouldn't.
+	if got := len(ch.Events()); got != 2 {
+		t.Errorf("clickhouse events = %d, want 2 (poison event must be skipped)", got)
+	}
+	for _, ev := range ch.Events() {
+		if ev.EventID.String() == "event-poison" || strings.Contains(ev.EventID.String(), "poison") {
+			t.Errorf("poison event leaked into ClickHouse: %+v", ev)
+		}
+	}
+
+	// Cursor advanced past the bad object — the whole point of skip-and-continue.
+	cursor, err := db.GetCursor(context.Background(), "test-machine")
+	if err != nil {
+		t.Fatalf("GetCursor: %v", err)
+	}
+	if cursor != key {
+		t.Errorf("cursor = %q, want %q (cursor must advance even when one event was skipped)", cursor, key)
+	}
+}
+
+// TestNonPoisonPillStillHalts verifies the original halt-batch behavior is
+// preserved for non-sentinel errors (e.g. transient network failures).
+func TestNonPoisonPillStillHalts(t *testing.T) {
+	t.Parallel()
+
+	db := openTempDB(t)
+	mc := minioclient.NewFake()
+	ch := &fakeClickHouse{}
+	ol := &fakeOllama{
+		errOnEventID: map[string]error{
+			"event-bad": errors.New("ollama: connection refused"), // NOT the sentinel
+		},
+	}
+
+	key := "raw/test-machine/2026/04/27/07/transient.jsonl"
+	putJSONL(t, mc, key, []map[string]any{
+		captureEvent("event-good-1", false),
+		captureEvent("event-bad", false),
+		captureEvent("event-good-2", false),
+	})
+
+	d := makeDaemon(t, db, mc, ch, ol)
+	d.processMachine(context.Background(), "test-machine")
+
+	cursor, err := db.GetCursor(context.Background(), "test-machine")
+	if err != nil {
+		t.Fatalf("GetCursor: %v", err)
+	}
+	if cursor != "" {
+		t.Errorf("cursor = %q, want empty (transient error must NOT advance cursor)", cursor)
 	}
 }
 

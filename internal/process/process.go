@@ -4,6 +4,7 @@ package process
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -392,7 +393,22 @@ func (d *daemon) processJSONL(ctx context.Context, path string, skippedInternal,
 		// Denoise via Ollama.
 		dr, err := d.ollama.Denoise(ctx, d.denoiseModel, string(line))
 		if err != nil {
-			// AC#4: Ollama failure mid-batch → halt processing, cursor does not advance.
+			// Poison-pill: model produced a response that doesn't unmarshal as
+			// DenoiseResult. Retrying will deterministically reproduce the
+			// failure and would block the entire pipeline. Skip the event,
+			// log loudly, and let the rest of the batch drain so the cursor
+			// can advance past this object.
+			if errors.Is(err, ollama.ErrUnparseableModelOutput) {
+				d.logger.Error("process: skipping event with unparseable model output (cursor will advance)",
+					slog.String("event_id", ev.EventID),
+					slog.String("denoise_model", d.denoiseModel),
+					slog.Any("error", err),
+				)
+				continue
+			}
+			// AC#4: any other Ollama failure (network, timeout, non-200 status)
+			// is potentially transient → halt batch, cursor does not advance,
+			// retry next cycle.
 			return fmt.Errorf("denoise event %s: %w", ev.EventID, err)
 		}
 
