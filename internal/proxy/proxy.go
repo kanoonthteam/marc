@@ -88,8 +88,16 @@ func Run(ctx context.Context, cfg Config) error {
 
 	srv := &http.Server{
 		Handler:      h,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 5 * time.Minute, // SSE streams can be long
+		ReadTimeout: 30 * time.Second,
+		// http.Server.WriteTimeout is the deadline for writing the *entire*
+		// response, streaming bodies included — so a single long Claude
+		// request (sub-agent invocations, deep reasoning + tool use loops)
+		// gets a TCP RST when this fires mid-stream. Observed live: a PM
+		// sub-agent run that took ~7 min produced "socket connection was
+		// closed unexpectedly" on the client. 30 min covers virtually every
+		// realistic single-request agent flow; Anthropic ends the stream
+		// long before then for healthy connections.
+		WriteTimeout: 30 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 		BaseContext: func(_ net.Listener) context.Context {
 			return ctx
