@@ -109,6 +109,17 @@ func TestDenoise_StreamFalseInRequestBody(t *testing.T) {
 	if stream != false {
 		t.Errorf("stream = %v, want false", stream)
 	}
+
+	// think must be explicitly false. Otherwise qwen3-style thinking models
+	// emit <think>…</think> tokens that, combined with format=json, cause
+	// Ollama to return an empty response field — the bug we hit in prod.
+	think, ok := reqMap["think"]
+	if !ok {
+		t.Fatal("request body missing 'think' field; thinking-capable models will return empty responses with format=json")
+	}
+	if think != false {
+		t.Errorf("think = %v, want false", think)
+	}
 }
 
 // TestDenoise_ReturnsPopulatedResult verifies that a valid Ollama response

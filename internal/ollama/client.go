@@ -87,6 +87,14 @@ type generateRequest struct {
 	Prompt string `json:"prompt"`
 	Stream bool   `json:"stream"`
 	Format string `json:"format"`
+	// Think disables the thinking-mode preamble on Qwen3-style models. We
+	// set it to false because Format=json combined with thinking returns
+	// an empty `response` field — the model emits its <think>…</think>
+	// chain-of-thought first, but Ollama's json-format guard rejects
+	// anything before the closing brace, so the visible response ends up
+	// empty and every event becomes a poison pill. Older Ollama versions
+	// without thinking support ignore this field.
+	Think *bool `json:"think,omitempty"`
 }
 
 // generateResponse is the outer JSON envelope returned by Ollama when
@@ -102,11 +110,13 @@ type generateResponse struct {
 func (c *ollamaClient) Denoise(ctx context.Context, model, rawEvent string) (*DenoiseResult, error) {
 	prompt := denoisePrompt() + "\n\n" + rawEvent
 
+	think := false
 	reqBody := generateRequest{
 		Model:  model,
 		Prompt: prompt,
 		Stream: false, // CRITICAL: prevents line-delimited streaming output
 		Format: "json",
+		Think:  &think,
 	}
 
 	bodyBytes, err := json.Marshal(reqBody)
