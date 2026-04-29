@@ -22,3 +22,12 @@ dist/
 
 # Per-user Claude Code settings
 .claude/settings.local.json
+
+# Defensive: never commit secrets, even by accident
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+secrets/

@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: false  # self-hosted runner already has module cache; cache-save was hanging at 13+ min
+          cache: true
 
       - name: vet
         run: go vet ./...
@@ -32,7 +32,7 @@ jobs:
         run: go test ./... -race -count=1
 
   size:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: test
     timeout-minutes: 10
     steps:
@@ -41,7 +41,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: false  # self-hosted runner already has module cache; cache-save was hanging at 13+ min
+          cache: true
 
       - name: Install arm64 cross-compiler (for parity with release; harmless on amd64)
         run: |

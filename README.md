@@ -95,16 +95,16 @@ marc proxy
 
 ## Quick start: client
 
-Download the `marc` binary for your platform from the [Releases page](https://github.com/caffeaun/marc/releases/latest).
+Download the `marc` binary for your platform from the [Releases page](https://github.com/kanoonthteam/marc/releases/latest).
 
 ```bash
 # macOS arm64
-curl -LO https://github.com/caffeaun/marc/releases/download/vX.Y.Z/marc-darwin-arm64
+curl -LO https://github.com/kanoonthteam/marc/releases/download/vX.Y.Z/marc-darwin-arm64
 chmod +x marc-darwin-arm64
 sudo mv marc-darwin-arm64 /usr/local/bin/marc
 
 # Linux amd64
-curl -LO https://github.com/caffeaun/marc/releases/download/vX.Y.Z/marc-linux-amd64
+curl -LO https://github.com/kanoonthteam/marc/releases/download/vX.Y.Z/marc-linux-amd64
 chmod +x marc-linux-amd64
 sudo mv marc-linux-amd64 /usr/local/bin/marc
 ```
@@ -168,11 +168,11 @@ ollama pull qwen3:8b
 # Note these values for step 5
 
 # 4. Install both binaries on Ubuntu
-curl -LO https://github.com/caffeaun/marc/releases/latest/download/marc-server-linux-amd64
+curl -LO https://github.com/kanoonthteam/marc/releases/latest/download/marc-server-linux-amd64
 chmod +x marc-server-linux-amd64
 sudo mv marc-server-linux-amd64 /usr/local/bin/marc-server
 
-curl -LO https://github.com/caffeaun/marc/releases/latest/download/marc-linux-amd64
+curl -LO https://github.com/kanoonthteam/marc/releases/latest/download/marc-linux-amd64
 chmod +x marc-linux-amd64
 sudo mv marc-linux-amd64 /usr/local/bin/marc
 
@@ -403,7 +403,7 @@ To update either binary on any machine:
 
 ```bash
 # Download the new binary (same URL pattern as initial install)
-curl -LO https://github.com/caffeaun/marc/releases/latest/download/marc-linux-amd64
+curl -LO https://github.com/kanoonthteam/marc/releases/latest/download/marc-linux-amd64
 chmod +x marc-linux-amd64
 sudo mv marc-linux-amd64 /usr/local/bin/marc
 
@@ -415,7 +415,7 @@ sudo systemctl restart marc-proxy marc-ship
 For the server binary:
 
 ```bash
-curl -LO https://github.com/caffeaun/marc/releases/latest/download/marc-server-linux-amd64
+curl -LO https://github.com/kanoonthteam/marc/releases/latest/download/marc-server-linux-amd64
 chmod +x marc-server-linux-amd64
 sudo mv marc-server-linux-amd64 /usr/local/bin/marc-server
 
