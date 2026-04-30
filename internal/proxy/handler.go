@@ -202,16 +202,28 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Compare a slow direct-to-Anthropic baseline against the same
 		// prompt through marc — if first_text_delta_ms and event_type_counts
 		// match, the proxy is innocent.
-		log.Info("sse stream summary",
+		summary := []any{
 			slog.Int("chunk_count", res.chunkCount),
 			slog.Int("first_chunk_ms", int(res.firstChunkMs)),
-			slog.Int("first_text_delta_ms", int(res.firstTextDeltaMs)),
-			slog.Int("first_thinking_ms", int(res.firstThinkingMs)),
 			slog.Int("max_inter_chunk_gap_ms", int(res.maxInterChunkGapMs)),
 			slog.Int("total_ms", int(res.totalMs)),
 			slog.Bool("saw_stop", res.sawStop),
+			// keepalive_pings surfaces the "Anthropic is silently reasoning"
+			// pattern without making the operator know that ping events are
+			// what fills the gap before text_delta starts.
+			slog.Int("keepalive_pings", res.eventTypeCounts["ping"]),
 			slog.Any("event_type_counts", res.eventTypeCounts),
-		)
+		}
+		// Only emit first_text_delta_ms / first_thinking_ms when the
+		// corresponding event actually arrived — otherwise the value 0 is
+		// ambiguous (no event vs. event at t=0).
+		if res.sawTextDelta {
+			summary = append(summary, slog.Int("first_text_delta_ms", int(res.firstTextDeltaMs)))
+		}
+		if res.sawThinking {
+			summary = append(summary, slog.Int("first_thinking_ms", int(res.firstThinkingMs)))
+		}
+		log.Info("sse stream summary", summary...)
 		if !res.sawStop {
 			log.Debug("proxy: SSE stream ended without message_stop", slog.String("path", r.URL.Path))
 		}
