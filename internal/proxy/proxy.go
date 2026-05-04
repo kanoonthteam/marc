@@ -76,6 +76,11 @@ type ProxyProfile struct {
 	// at proxy startup; empty means rely on the incoming x-api-key header.
 	APIKey string
 
+	// Model, when non-empty, rewrites the JSON request body's "model"
+	// field on the way upstream. Lets the operator set per-profile model
+	// defaults so callers don't need --model or ANTHROPIC_MODEL.
+	Model string
+
 	// HeaderOverrides are extra request headers applied to every forwarded
 	// request, replacing any incoming value of the same name.
 	HeaderOverrides map[string]string

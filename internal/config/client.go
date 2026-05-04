@@ -68,6 +68,13 @@ type ClientProfile struct {
 	// (OpenAI-compatible providers).
 	AuthStyle string `toml:"auth_style"`
 
+	// Model is the canonical model name for this provider. When set, the
+	// proxy rewrites the JSON request body's "model" field on the way
+	// upstream, so the caller doesn't have to remember --model. Capture
+	// events still record the original (caller-requested) body, not the
+	// rewritten one.
+	Model string `toml:"model"`
+
 	// HeaderOverrides are extra request headers applied to every forwarded
 	// request. Useful for providers that require pinned versions
 	// (e.g. anthropic-version = "2023-06-01").
@@ -206,11 +213,10 @@ api_key_env = "ANTHROPIC_API_KEY"
 auth_style  = "x-api-key"
 
 # [profiles.minimax]
-# base_url    = "https://api.minimax.chat/v1"
-# api_key_env = "MINIMAX_API_KEY"
+# base_url    = "https://api.minimax.io/anthropic"
+# api_key     = "<minimax-token>"   # or api_key_env = "MINIMAX_API_KEY"
 # auth_style  = "bearer"
-# [profiles.minimax.header_overrides]
-# "anthropic-version" = "2023-06-01"
+# model       = "MiniMax-M2.7"      # rewrites request body's model field
 
 [shipper]
 rotate_size_mb = 5

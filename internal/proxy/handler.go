@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,34 @@ import (
 
 	"github.com/caffeaun/marc/internal/jsonl"
 )
+
+// rewriteModel returns a body with the top-level JSON "model" field replaced
+// by `model`. Returns the original body and ok=false if:
+//   - body isn't valid JSON (e.g. multipart, non-POST without body),
+//   - the JSON root isn't an object,
+//   - the object has no "model" field at all (some endpoints like /v1/models
+//     don't carry one — leave them alone).
+//
+// Only the top-level field is rewritten; nested occurrences (e.g. inside
+// tool descriptions) are untouched.
+func rewriteModel(body []byte, model string) ([]byte, bool) {
+	if len(body) == 0 || model == "" {
+		return body, false
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return body, false
+	}
+	if _, ok := obj["model"]; !ok {
+		return body, false
+	}
+	obj["model"] = model
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return body, false
+	}
+	return out, true
+}
 
 // handler is the http.Handler for all proxy requests.
 type handler struct {
@@ -166,7 +195,23 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	upURL.Path = basePath + restPath
 	upURL.RawQuery = r.URL.RawQuery
 
-	upReq, err := http.NewRequestWithContext(r.Context(), r.Method, upURL.String(), bytes.NewReader(reqBody))
+	// Per-profile model rewrite: if profile.Model is set, replace the
+	// request body's "model" field before forwarding. The captured body
+	// (reqBody, used in buildCaptureEvent below) keeps the ORIGINAL model
+	// so the corpus reflects what the caller actually requested.
+	upstreamBody := reqBody
+	if profile.Model != "" {
+		if rewritten, ok := rewriteModel(reqBody, profile.Model); ok {
+			upstreamBody = rewritten
+			log.Debug("proxy: model rewrite applied",
+				slog.String("to", profile.Model),
+				slog.Int("body_bytes_before", len(reqBody)),
+				slog.Int("body_bytes_after", len(upstreamBody)),
+			)
+		}
+	}
+
+	upReq, err := http.NewRequestWithContext(r.Context(), r.Method, upURL.String(), bytes.NewReader(upstreamBody))
 	if err != nil {
 		h.health.recordFailure("build upstream request: " + err.Error())
 		log.Error("proxy: failed to build upstream request", slog.Any("error", err))

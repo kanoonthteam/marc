@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -205,5 +206,114 @@ func TestProfileBaseURLWithPath(t *testing.T) {
 	}
 	if seenPath != "/anthropic/v1/messages" {
 		t.Fatalf("upstream got path %q, want /anthropic/v1/messages (base_url path was joined)", seenPath)
+	}
+}
+
+// TestProfileModelRewrite verifies that when a profile has a Model set,
+// the proxy rewrites the request body's "model" field before forwarding,
+// while leaving the ORIGINAL body intact for capture.
+func TestProfileModelRewrite(t *testing.T) {
+	var seenBody []byte
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"ok"}`))
+	}))
+	defer upstream.Close()
+
+	tmp := t.TempDir()
+	cfg := Config{
+		ListenAddr:     "127.0.0.1:0",
+		CapturePath:    filepath.Join(tmp, "capture.jsonl"),
+		Machine:        "test",
+		EventChanCap:   16,
+		DefaultProfile: "anthropic",
+		Profiles: map[string]ProxyProfile{
+			"anthropic": {Name: "anthropic", BaseURL: upstream.URL, AuthStyle: "x-api-key"},
+			"minimax": {
+				Name:      "minimax",
+				BaseURL:   upstream.URL,
+				AuthStyle: "bearer",
+				Model:     "MiniMax-M2.7",
+			},
+		},
+	}
+	eventCh := make(chan jsonl.CaptureEvent, 16)
+	h := newHandler(cfg, eventCh)
+	h.transport = upstream.Client().Transport
+
+	originalBody := `{"model":"claude-sonnet-4","max_tokens":50,"messages":[{"role":"user","content":"hi"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/minimax/v1/messages", strings.NewReader(originalBody))
+	req.Header.Set("x-api-key", "key")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Upstream should have seen the rewritten body.
+	if !strings.Contains(string(seenBody), `"model":"MiniMax-M2.7"`) {
+		t.Fatalf("upstream body did not contain rewritten model:\n%s", seenBody)
+	}
+	if strings.Contains(string(seenBody), `"claude-sonnet-4"`) {
+		t.Fatalf("upstream body still contains original model:\n%s", seenBody)
+	}
+
+	// Other fields preserved.
+	if !strings.Contains(string(seenBody), `"max_tokens":50`) {
+		t.Fatalf("max_tokens lost in rewrite: %s", seenBody)
+	}
+	if !strings.Contains(string(seenBody), `"messages"`) {
+		t.Fatalf("messages array lost in rewrite: %s", seenBody)
+	}
+
+	// Capture event MUST keep the ORIGINAL model (unbiased corpus).
+	close(eventCh)
+	for ev := range eventCh {
+		if !strings.Contains(string(ev.Request), `"claude-sonnet-4"`) {
+			t.Errorf("capture should have original model 'claude-sonnet-4', got: %s", ev.Request)
+		}
+		if strings.Contains(string(ev.Request), `"MiniMax-M2.7"`) {
+			t.Errorf("capture leaked rewritten model name: %s", ev.Request)
+		}
+	}
+}
+
+// TestProfileModelRewriteSkipped verifies that body without a "model" field
+// (e.g. /v1/models endpoint) is forwarded unchanged.
+func TestProfileModelRewriteSkipped(t *testing.T) {
+	var seenBody []byte
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	tmp := t.TempDir()
+	cfg := Config{
+		ListenAddr:     "127.0.0.1:0",
+		CapturePath:    filepath.Join(tmp, "capture.jsonl"),
+		Machine:        "test",
+		EventChanCap:   16,
+		DefaultProfile: "minimax",
+		Profiles: map[string]ProxyProfile{
+			"minimax": {Name: "minimax", BaseURL: upstream.URL, Model: "MiniMax-M2.7"},
+		},
+	}
+	eventCh := make(chan jsonl.CaptureEvent, 16)
+	h := newHandler(cfg, eventCh)
+	h.transport = upstream.Client().Transport
+	defer close(eventCh)
+
+	original := `{"unrelated":"data"}`
+	req := httptest.NewRequest(http.MethodPost, "/minimax/v1/something", strings.NewReader(original))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if string(seenBody) != original {
+		t.Fatalf("body should pass through when no model field; got %s", seenBody)
 	}
 }

@@ -493,12 +493,14 @@ api_key_env = "ANTHROPIC_API_KEY"
 auth_style  = "x-api-key"
 
 [profiles.minimax]
-base_url    = "https://api.minimax.chat/v1"
-api_key_env = "MINIMAX_API_KEY"
-auth_style  = "bearer"
+base_url   = "https://api.minimax.io/anthropic"
+api_key    = "<minimax-token>"      # or api_key_env = "MINIMAX_API_KEY"
+auth_style = "bearer"
+model      = "MiniMax-M2.7"         # proxy rewrites request body's model field
 
-[profiles.minimax.header_overrides]
-"anthropic-version" = "2023-06-01"
+# Optional — extra request headers if the provider needs them:
+# [profiles.minimax.header_overrides]
+# "anthropic-version" = "2023-06-01"
 ```
 
 Legacy configs without a `[profiles]` block are auto-migrated — the existing `[proxy]` settings become `profiles.anthropic` on first load.
@@ -531,6 +533,8 @@ marc --continue
 
 - `x-api-key`: forward incoming `x-api-key` header verbatim (Anthropic-native)
 - `bearer`: convert `x-api-key` to `Authorization: Bearer <key>` (OpenAI-compatible)
+
+If the profile sets `model = "..."`, the proxy also rewrites the request body's `model` field on the way upstream — useful for providers (like Minimax) that have their own model names. Capture events keep the original (caller-requested) body, not the rewritten one.
 
 ### Captured corpus stays provider-agnostic
 

@@ -218,6 +218,7 @@ func loadProxyConfigWithClientCfg(cmd *cobra.Command) (proxy.Config, *config.Cli
 					BaseURL:         p.BaseURL,
 					AuthStyle:       p.AuthStyle,
 					APIKey:          key,
+					Model:           p.Model,
 					HeaderOverrides: p.HeaderOverrides,
 				}
 			}
