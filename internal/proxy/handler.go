@@ -156,9 +156,14 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = r.Body.Close()
 
 	// Build the upstream request URL using the per-profile base + the
-	// rest-path stripped from the routing prefix.
+	// rest-path stripped from the routing prefix. base_url may itself
+	// contain a path (e.g. "https://api.minimax.io/anthropic") — JOIN
+	// it with restPath rather than overwriting, so /v1/messages becomes
+	// /anthropic/v1/messages on minimax. When base_url has no path the
+	// behaviour is unchanged from a single-segment join.
 	upURL := *upstreamRoot
-	upURL.Path = restPath
+	basePath := strings.TrimRight(upstreamRoot.Path, "/")
+	upURL.Path = basePath + restPath
 	upURL.RawQuery = r.URL.RawQuery
 
 	upReq, err := http.NewRequestWithContext(r.Context(), r.Method, upURL.String(), bytes.NewReader(reqBody))

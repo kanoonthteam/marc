@@ -189,8 +189,10 @@ log_file = "~/.marc/marc.log"
 
 [proxy]
 listen_addr = "127.0.0.1:8082"
-upstream_url = "https://api.anthropic.com"   # legacy; profiles take precedence
 stripped_headers = ["authorization", "x-api-key", "cookie"]
+# upstream_url is legacy — only used when no [profiles] block is defined,
+# in which case it auto-synthesizes a single "anthropic" profile. With
+# profiles defined below, this field is ignored and can be deleted.
 
 # Profiles enable AWS-style provider switching:
 #   marc --profile anthropic --continue

@@ -163,3 +163,47 @@ func TestProfileRouting(t *testing.T) {
 		t.Errorf("expected 1 minimax hit, got %d", minimaxHits)
 	}
 }
+
+// TestProfileBaseURLWithPath verifies that when a profile's base_url itself
+// has a path component (e.g. "https://api.minimax.io/anthropic"), the proxy
+// JOINS it with the request's restPath instead of overwriting. Regression
+// test for v0.4.0 → v0.4.1.
+func TestProfileBaseURLWithPath(t *testing.T) {
+	var seenPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer upstream.Close()
+
+	tmp := t.TempDir()
+	cfg := Config{
+		ListenAddr:     "127.0.0.1:0",
+		CapturePath:    filepath.Join(tmp, "capture.jsonl"),
+		Machine:        "test",
+		EventChanCap:   16,
+		DefaultProfile: "anthropic",
+		Profiles: map[string]ProxyProfile{
+			"anthropic": {Name: "anthropic", BaseURL: upstream.URL, AuthStyle: "x-api-key"},
+			// Critical bit: base_url has a /anthropic suffix path.
+			"minimax": {Name: "minimax", BaseURL: upstream.URL + "/anthropic", AuthStyle: "bearer"},
+		},
+	}
+	eventCh := make(chan jsonl.CaptureEvent, 16)
+	h := newHandler(cfg, eventCh)
+	h.transport = upstream.Client().Transport
+	defer close(eventCh)
+
+	req := httptest.NewRequest(http.MethodPost, "/minimax/v1/messages", strings.NewReader(`{}`))
+	req.Header.Set("x-api-key", "k")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if seenPath != "/anthropic/v1/messages" {
+		t.Fatalf("upstream got path %q, want /anthropic/v1/messages (base_url path was joined)", seenPath)
+	}
+}
