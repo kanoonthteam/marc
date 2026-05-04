@@ -478,6 +478,66 @@ rolls back the systemd units if it fails.
 
 ---
 
+## Profiles (multi-provider routing)
+
+marc supports AWS-style profile selection so one install can talk to multiple LLM providers (Anthropic, Minimax, OpenAI-compatible APIs, etc.) — captured to a single shared corpus, with the proxy doing path-prefix routing on a single port.
+
+### Define profiles in `~/.marc/config.toml`
+
+```toml
+default_profile = "anthropic"
+
+[profiles.anthropic]
+base_url    = "https://api.anthropic.com"
+api_key_env = "ANTHROPIC_API_KEY"
+auth_style  = "x-api-key"
+
+[profiles.minimax]
+base_url    = "https://api.minimax.chat/v1"
+api_key_env = "MINIMAX_API_KEY"
+auth_style  = "bearer"
+
+[profiles.minimax.header_overrides]
+"anthropic-version" = "2023-06-01"
+```
+
+Legacy configs without a `[profiles]` block are auto-migrated — the existing `[proxy]` settings become `profiles.anthropic` on first load.
+
+### Use a profile
+
+```bash
+# AWS-style flag — works with --continue, -p, --resume, anything claude accepts:
+marc --profile minimax --continue
+marc --profile minimax -p "explain this stack trace"
+
+# Or set MARC_PROFILE for the whole shell:
+export MARC_PROFILE=minimax
+marc -p "..."
+
+# Without flag/env, the default_profile is used:
+marc --continue
+```
+
+### Resolution order (AWS precedence)
+
+1. `--profile <name>` flag
+2. `MARC_PROFILE` environment variable
+3. `default_profile` field in config
+4. Hardcoded fallback `"anthropic"`
+
+### How routing works
+
+`clauderun` sets `ANTHROPIC_BASE_URL=http://<listen_addr>/<profile>` for the spawned `claude` process. The proxy parses the leading path segment, looks up the profile, rewrites the URL to that profile's `base_url`, and applies the matching `auth_style`:
+
+- `x-api-key`: forward incoming `x-api-key` header verbatim (Anthropic-native)
+- `bearer`: convert `x-api-key` to `Authorization: Bearer <key>` (OpenAI-compatible)
+
+### Captured corpus stays provider-agnostic
+
+By design, capture events do **not** include the profile name. The denoise → retrieval → active-learning loop reads a clean conversation stream regardless of which provider answered. If you ever need per-provider analytics, derive them from the proxy access log, not the corpus.
+
+---
+
 ## Subcommand reference
 
 ### `marc` (client binary, all platforms)

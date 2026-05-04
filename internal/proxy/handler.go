@@ -16,7 +16,7 @@ import (
 // handler is the http.Handler for all proxy requests.
 type handler struct {
 	cfg       Config
-	upstream  *url.URL
+	upstreams map[string]*url.URL // pre-parsed per-profile base URLs
 	eventCh   chan<- jsonl.CaptureEvent
 	transport http.RoundTripper
 	health    *healthState
@@ -25,14 +25,57 @@ type handler struct {
 // newHandler constructs a handler from the given config and event channel.
 // transport may be nil; if so http.DefaultTransport is used (allows tests to
 // inject a custom transport).
+//
+// When cfg.Profiles is empty, synthesizes the default "anthropic" profile from
+// cfg.UpstreamURL. This lets tests and pre-profiles callers continue to use the
+// flat Config-with-UpstreamURL form without manually setting up Profiles.
 func newHandler(cfg Config, eventCh chan<- jsonl.CaptureEvent) *handler {
-	u, _ := url.Parse(cfg.UpstreamURL)
-	return &handler{
-		cfg:      cfg,
-		upstream: u,
-		eventCh:  eventCh,
-		health:   newHealthState(),
+	synthesizeDefaultProfiles(&cfg)
+	upstreams := make(map[string]*url.URL, len(cfg.Profiles))
+	for name, p := range cfg.Profiles {
+		if u, err := url.Parse(p.BaseURL); err == nil {
+			upstreams[name] = u
+		}
 	}
+	return &handler{
+		cfg:       cfg,
+		upstreams: upstreams,
+		eventCh:   eventCh,
+		health:    newHealthState(),
+	}
+}
+
+// routeRequest parses the incoming URL path into (profile, restPath, ok).
+//
+// Accepted shapes:
+//
+//	/<profile>/v1/...   → profile = first segment, restPath = "/v1/..."
+//	/v1/...             → profile = cfg.DefaultProfile  (legacy / direct caller)
+//
+// Anything else returns ok=false; the caller should 404.
+func (h *handler) routeRequest(rawPath string) (profile, restPath string, ok bool) {
+	if !strings.HasPrefix(rawPath, "/") {
+		return "", "", false
+	}
+	trimmed := strings.TrimPrefix(rawPath, "/")
+	if trimmed == "" {
+		return "", "", false
+	}
+	first, rest, _ := strings.Cut(trimmed, "/")
+
+	// Legacy: /v1/... routes to default profile.
+	if first == "v1" {
+		return h.cfg.DefaultProfile, rawPath, true
+	}
+
+	// /<profile>/v1/... — the profile must exist and rest must start with v1.
+	if _, exists := h.upstreams[first]; !exists {
+		return "", "", false
+	}
+	if !strings.HasPrefix(rest, "v1/") && rest != "v1" {
+		return "", "", false
+	}
+	return first, "/" + rest, true
 }
 
 // countingResponseWriter wraps an http.ResponseWriter and tracks total bytes
@@ -69,8 +112,16 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveHealth(w, r)
 		return
 	}
-	// Only proxy /v1/* paths. Return 404 for anything else.
-	if !strings.HasPrefix(r.URL.Path, "/v1/") {
+
+	// Resolve the path → (profile, upstream rest-path).
+	profileName, restPath, ok := h.routeRequest(r.URL.Path)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	profile := h.cfg.Profiles[profileName]
+	upstreamRoot := h.upstreams[profileName]
+	if upstreamRoot == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -82,10 +133,14 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// fall through with a sentinel rather than 500'ing the request.
 		reqID = "no-id"
 	}
-	log := slog.With(slog.String("request_id", reqID))
+	log := slog.With(
+		slog.String("request_id", reqID),
+		slog.String("profile", profileName),
+	)
 	log.Info("request received",
 		slog.String("method", r.Method),
 		slog.String("path", r.URL.Path),
+		slog.String("upstream_path", restPath),
 	)
 
 	cw := &countingResponseWriter{ResponseWriter: w}
@@ -100,9 +155,10 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = r.Body.Close()
 
-	// Build the upstream request URL.
-	upURL := *h.upstream
-	upURL.Path = r.URL.Path
+	// Build the upstream request URL using the per-profile base + the
+	// rest-path stripped from the routing prefix.
+	upURL := *upstreamRoot
+	upURL.Path = restPath
 	upURL.RawQuery = r.URL.RawQuery
 
 	upReq, err := http.NewRequestWithContext(r.Context(), r.Method, upURL.String(), bytes.NewReader(reqBody))
@@ -120,6 +176,31 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			upReq.Header.Add(k, v)
 		}
 	}
+
+	// Per-profile auth-style adjustment.
+	switch profile.AuthStyle {
+	case "bearer":
+		// Convert Anthropic-native x-api-key to OpenAI-style bearer token.
+		// Use the request's incoming key if no profile-level key configured;
+		// otherwise the operator's stored key wins (lets a single Claude
+		// session route to a non-Anthropic provider with a different key).
+		key := profile.APIKey
+		if key == "" {
+			key = upReq.Header.Get("x-api-key")
+		}
+		upReq.Header.Del("x-api-key")
+		if key != "" {
+			upReq.Header.Set("Authorization", "Bearer "+key)
+		}
+	case "x-api-key", "":
+		// Default Anthropic style — pass through unchanged.
+	}
+
+	// Per-profile header overrides (applied last so they always win).
+	for k, v := range profile.HeaderOverrides {
+		upReq.Header.Set(k, v)
+	}
+
 	// Strip Accept-Encoding so the upstream returns uncompressed SSE.
 	// We need to read the SSE stream as plain text to aggregate it into the
 	// JSONL event's response field; with gzip enabled, the proxy would have

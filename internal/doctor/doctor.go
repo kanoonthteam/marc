@@ -268,6 +268,15 @@ func Run(ctx context.Context, opts Options) Result {
 	add(healthCheck)
 	add(recencyCheck)
 
+	// 9.5. Each configured profile's upstream is reachable. One TCP-dial per
+	// profile, 3s timeout. Doesn't validate auth — just that the endpoint
+	// resolves and accepts connections. Failures are warnings, not fails:
+	// the operator may have set up minimax/openai for later use without it
+	// being live yet.
+	for name, p := range cfg.Profiles {
+		add(checkProfileReachable(name, p))
+	}
+
 	// 10. Capture file appendable.
 	capturePath := cfg.Paths.CaptureFile
 	if capturePath == "" {
@@ -283,6 +292,41 @@ func Run(ctx context.Context, opts Options) Result {
 	checkMinIO(ctx, opts, cfg, add12)
 
 	return res
+}
+
+// checkProfileReachable does a quick TCP dial against the profile's BaseURL.
+// Pass = endpoint accepts a connection. Warn = unreachable (network /
+// firewall / DNS issue). Doesn't attempt to validate auth or HTTP status —
+// those are deferred to actual request flow.
+func checkProfileReachable(name string, p config.ClientProfile) Check {
+	label := "profile " + name + " upstream reachable"
+	u, err := url.Parse(p.BaseURL)
+	if err != nil || u.Host == "" {
+		return Check{label, SevFail, "unparseable base_url: " + p.BaseURL}
+	}
+	host := u.Host
+	if !strings.Contains(host, ":") {
+		switch u.Scheme {
+		case "https":
+			host += ":443"
+		case "http":
+			host += ":80"
+		default:
+			return Check{label, SevFail, "unsupported scheme: " + u.Scheme}
+		}
+	}
+	conn, err := net.DialTimeout("tcp", host, 3*time.Second)
+	if err != nil {
+		return Check{label, SevWarn, "TCP dial " + host + ": " + err.Error()}
+	}
+	_ = conn.Close()
+	keyStatus := ""
+	if p.APIKeyEnv != "" {
+		if os.Getenv(p.APIKeyEnv) == "" {
+			keyStatus = " (note: " + p.APIKeyEnv + " env var is empty)"
+		}
+	}
+	return Check{label, SevPass, host + keyStatus}
 }
 
 // loadClientWithoutModeCheck calls config.LoadClient. We accept its error

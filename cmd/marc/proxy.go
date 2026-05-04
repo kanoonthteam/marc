@@ -203,6 +203,26 @@ func loadProxyConfigWithClientCfg(cmd *cobra.Command) (proxy.Config, *config.Cli
 		if clientCfg.MachineName != "" {
 			proxyCfg.Machine = clientCfg.MachineName
 		}
+		// Map client profiles → proxy profiles. Resolve each profile's API
+		// key from its env var at startup time (so the proxy doesn't need to
+		// hold the env name; the request handler can do a direct lookup).
+		if len(clientCfg.Profiles) > 0 {
+			proxyCfg.Profiles = make(map[string]proxy.ProxyProfile, len(clientCfg.Profiles))
+			for name, p := range clientCfg.Profiles {
+				key := p.APIKey
+				if key == "" && p.APIKeyEnv != "" {
+					key = os.Getenv(p.APIKeyEnv)
+				}
+				proxyCfg.Profiles[name] = proxy.ProxyProfile{
+					Name:            name,
+					BaseURL:         p.BaseURL,
+					AuthStyle:       p.AuthStyle,
+					APIKey:          key,
+					HeaderOverrides: p.HeaderOverrides,
+				}
+			}
+			proxyCfg.DefaultProfile = clientCfg.DefaultProfile
+		}
 	}
 
 	// --listen-addr flag takes highest priority.

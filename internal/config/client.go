@@ -46,15 +46,96 @@ type ClientAnthropic struct {
 	APIKey string `toml:"api_key"`
 }
 
+// ClientProfile describes a single LLM provider routing target.
+//
+// Profiles let one marc install talk to multiple providers (Anthropic,
+// Minimax, OpenAI, etc.) via path-prefix routing. The proxy forwards
+// /<name>/v1/* requests to the profile's BaseURL, applying the matching
+// auth style and any header overrides.
+type ClientProfile struct {
+	// BaseURL is the upstream API root (e.g. "https://api.anthropic.com").
+	BaseURL string `toml:"base_url"`
+
+	// APIKeyEnv is the name of the environment variable holding this
+	// profile's API key. Preferred over APIKey for security.
+	APIKeyEnv string `toml:"api_key_env"`
+
+	// APIKey is the inline API key. Optional — APIKeyEnv is preferred.
+	// Only honoured when the config file mode is 0600.
+	APIKey string `toml:"api_key"`
+
+	// AuthStyle is "x-api-key" (Anthropic-native) or "bearer"
+	// (OpenAI-compatible providers).
+	AuthStyle string `toml:"auth_style"`
+
+	// HeaderOverrides are extra request headers applied to every forwarded
+	// request. Useful for providers that require pinned versions
+	// (e.g. anthropic-version = "2023-06-01").
+	HeaderOverrides map[string]string `toml:"header_overrides"`
+}
+
 // ClientConfig is the top-level configuration for the marc client binary.
 // It is loaded from ~/.marc/config.toml (mode 0600).
 type ClientConfig struct {
-	MachineName string          `toml:"machine_name"`
-	Paths       ClientPaths     `toml:"paths"`
-	Proxy       ClientProxy     `toml:"proxy"`
-	Shipper     ClientShipper   `toml:"shipper"`
-	MinIO       ClientMinIO     `toml:"minio"`
-	Anthropic   ClientAnthropic `toml:"anthropic"`
+	MachineName    string                   `toml:"machine_name"`
+	Paths          ClientPaths              `toml:"paths"`
+	Proxy          ClientProxy              `toml:"proxy"`
+	Shipper        ClientShipper            `toml:"shipper"`
+	MinIO          ClientMinIO              `toml:"minio"`
+	Anthropic      ClientAnthropic          `toml:"anthropic"`
+	DefaultProfile string                   `toml:"default_profile"`
+	Profiles       map[string]ClientProfile `toml:"profiles"`
+}
+
+// migrateProfiles ensures cfg.Profiles is non-empty. When the config has no
+// [profiles] block (legacy single-provider configs), it synthesizes a default
+// "anthropic" profile from the legacy [proxy] + [anthropic] blocks. This
+// preserves backward compatibility — existing configs keep working unchanged.
+//
+// Also normalizes DefaultProfile: empty → "anthropic".
+func (cfg *ClientConfig) migrateProfiles() {
+	if cfg.Profiles == nil {
+		cfg.Profiles = make(map[string]ClientProfile)
+	}
+	if len(cfg.Profiles) == 0 {
+		base := strings.TrimSpace(cfg.Proxy.UpstreamURL)
+		if base == "" {
+			base = "https://api.anthropic.com"
+		}
+		cfg.Profiles["anthropic"] = ClientProfile{
+			BaseURL:   base,
+			APIKeyEnv: "ANTHROPIC_API_KEY",
+			APIKey:    cfg.Anthropic.APIKey,
+			AuthStyle: "x-api-key",
+		}
+	}
+	if strings.TrimSpace(cfg.DefaultProfile) == "" {
+		cfg.DefaultProfile = "anthropic"
+	}
+}
+
+// ResolveProfile returns the profile for the given name, falling back to
+// DefaultProfile when name is empty. Returns an error if the resolved name
+// doesn't exist in cfg.Profiles, listing available profiles in the message.
+func (cfg *ClientConfig) ResolveProfile(name string) (string, ClientProfile, error) {
+	resolved := strings.TrimSpace(name)
+	if resolved == "" {
+		resolved = cfg.DefaultProfile
+	}
+	if resolved == "" {
+		resolved = "anthropic"
+	}
+	p, ok := cfg.Profiles[resolved]
+	if !ok {
+		available := make([]string, 0, len(cfg.Profiles))
+		for k := range cfg.Profiles {
+			available = append(available, k)
+		}
+		return "", ClientProfile{}, fmt.Errorf(
+			"config: profile %q not found (available: %s)",
+			resolved, strings.Join(available, ", "))
+	}
+	return resolved, p, nil
 }
 
 // LoadClient reads and parses the client config at path.
@@ -85,6 +166,8 @@ func LoadClient(path string) (*ClientConfig, error) {
 		return nil, err
 	}
 
+	cfg.migrateProfiles()
+
 	return &cfg, nil
 }
 
@@ -98,6 +181,7 @@ func PrintDefaultClient(w io.Writer) error {
 
 // defaultClientTOML is the verbatim template from spec §"Client config file format".
 const defaultClientTOML = `machine_name = "macbook-kanoon"
+default_profile = "anthropic"
 
 [paths]
 capture_file = "~/.marc/capture.jsonl"
@@ -105,8 +189,26 @@ log_file = "~/.marc/marc.log"
 
 [proxy]
 listen_addr = "127.0.0.1:8082"
-upstream_url = "https://api.anthropic.com"
+upstream_url = "https://api.anthropic.com"   # legacy; profiles take precedence
 stripped_headers = ["authorization", "x-api-key", "cookie"]
+
+# Profiles enable AWS-style provider switching:
+#   marc --profile anthropic --continue
+#   marc --profile minimax -p "..."
+# Resolution order: --profile flag > MARC_PROFILE env > default_profile > "anthropic".
+# Add more profiles by appending [profiles.<name>] sections.
+
+[profiles.anthropic]
+base_url    = "https://api.anthropic.com"
+api_key_env = "ANTHROPIC_API_KEY"
+auth_style  = "x-api-key"
+
+# [profiles.minimax]
+# base_url    = "https://api.minimax.chat/v1"
+# api_key_env = "MINIMAX_API_KEY"
+# auth_style  = "bearer"
+# [profiles.minimax.header_overrides]
+# "anthropic-version" = "2023-06-01"
 
 [shipper]
 rotate_size_mb = 5

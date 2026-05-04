@@ -19,8 +19,20 @@ type Config struct {
 	// ListenAddr is the address the proxy listens on, e.g. "127.0.0.1:8082".
 	ListenAddr string
 
-	// UpstreamURL is the upstream API base URL, e.g. "https://api.anthropic.com".
+	// UpstreamURL is the upstream API base URL for backward compatibility,
+	// e.g. "https://api.anthropic.com". When Profiles is non-empty,
+	// UpstreamURL is ignored — routing is per-profile.
 	UpstreamURL string
+
+	// Profiles is the map of profile name → upstream config. The handler
+	// routes /<profile>/v1/... to the matching profile's BaseURL.
+	// When empty, the proxy synthesizes a single "anthropic" profile from
+	// UpstreamURL.
+	Profiles map[string]ProxyProfile
+
+	// DefaultProfile is the profile used for legacy /v1/... paths that
+	// don't include a profile prefix.
+	DefaultProfile string
 
 	// CapturePath is the fully expanded path to capture.jsonl.
 	CapturePath string
@@ -43,6 +55,52 @@ type Config struct {
 	// pre-bind to an ephemeral port and pass the listener so they can read
 	// the kernel-assigned address before the server starts serving.
 	Listener net.Listener
+}
+
+// ProxyProfile is the proxy-side view of a profile: just the routing inputs
+// needed to forward a request. (The client config has more fields — file
+// paths, env-var names — that the proxy doesn't care about beyond startup.)
+type ProxyProfile struct {
+	// Name is the profile name (matches the URL prefix).
+	Name string
+
+	// BaseURL is the upstream API root, e.g. "https://api.anthropic.com".
+	BaseURL string
+
+	// AuthStyle is "x-api-key" (Anthropic-native, forward header verbatim)
+	// or "bearer" (rewrite incoming x-api-key to Authorization: Bearer <key>).
+	AuthStyle string
+
+	// APIKey is used only for AuthStyle == "bearer" — the proxy injects it
+	// as the Bearer credential. Loaded from the env var named in APIKeyEnv
+	// at proxy startup; empty means rely on the incoming x-api-key header.
+	APIKey string
+
+	// HeaderOverrides are extra request headers applied to every forwarded
+	// request, replacing any incoming value of the same name.
+	HeaderOverrides map[string]string
+}
+
+// synthesizeDefaultProfiles fills in cfg.Profiles and cfg.DefaultProfile when
+// they aren't set by the caller. Mirrors config.migrateProfiles on the client
+// side so tests and legacy single-upstream callers (using cfg.UpstreamURL
+// alone) keep working unchanged.
+func synthesizeDefaultProfiles(cfg *Config) {
+	if cfg.UpstreamURL == "" {
+		cfg.UpstreamURL = "https://api.anthropic.com"
+	}
+	if len(cfg.Profiles) == 0 {
+		cfg.Profiles = map[string]ProxyProfile{
+			"anthropic": {
+				Name:      "anthropic",
+				BaseURL:   cfg.UpstreamURL,
+				AuthStyle: "x-api-key",
+			},
+		}
+	}
+	if cfg.DefaultProfile == "" {
+		cfg.DefaultProfile = "anthropic"
+	}
 }
 
 // overflowDrops counts events dropped because the channel was full.
@@ -71,9 +129,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if cfg.EventChanCap <= 0 {
 		cfg.EventChanCap = 256
 	}
-	if cfg.UpstreamURL == "" {
-		cfg.UpstreamURL = "https://api.anthropic.com"
-	}
+	synthesizeDefaultProfiles(&cfg)
 
 	eventCh := make(chan jsonl.CaptureEvent, cfg.EventChanCap)
 
