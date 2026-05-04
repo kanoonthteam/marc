@@ -1,0 +1,4 @@
+# marc Python helpers (marc-bot-tick.py, marc-generate-tick.sh)
+# The Go marc-server itself is built separately; this is just for the
+# Telegram tick + queue-refill helpers.
+requests>=2.31
