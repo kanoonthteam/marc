@@ -91,16 +91,23 @@ Implementation:
 
 ## Shared capture format
 
-`~/.marc/capture.jsonl` — append-only JSONL, one event per line. Add `profile` field:
+`~/.marc/capture.jsonl` — append-only JSONL, one event per line. Client proxy adds `profile` field on write:
 
 ```jsonl
 {"profile":"anthropic","captured_at":"2026-05-04T15:30Z","request":{...},"response":{...},"machine":"ws01"}
 {"profile":"minimax","captured_at":"2026-05-04T15:31Z","request":{...},"response":{...},"machine":"ws01"}
 ```
 
-Old events without `profile` are treated as `"anthropic"` by the denoise pipeline (single line in `internal/process/process.go`).
+**No server-side changes.** The marc-server denoise pipeline (`internal/process/process.go`, `cmd/marc-server/`) and ClickHouse schema stay untouched. The proxy writes `profile` into the event JSON; the server reads/stores the JSON unchanged.
 
-ClickHouse schema: add `profile LowCardinality(String) DEFAULT 'anthropic'` to the events table. Backfill existing rows once via a one-shot UPDATE.
+If/when querying by profile is needed later, ClickHouse can extract from the stored JSON at query time:
+
+```sql
+SELECT JSONExtractString(raw_event, 'profile') AS profile, count(*)
+FROM events GROUP BY profile;
+```
+
+A proper `profile LowCardinality(String)` column can be added in a separate later PR if query performance demands it. v1 is client-only.
 
 ## Implementation phases
 
@@ -110,12 +117,11 @@ ClickHouse schema: add `profile LowCardinality(String) DEFAULT 'anthropic'` to t
 | 2 | ~80  | `internal/clauderun/profile.go`, `_test.go` | `ParseProfileFlag` + `ResolveProfile` |
 | 3 | ~30  | `internal/clauderun/clauderun.go`, `cmd/marc/main.go` | `clauderun.Run` uses resolved profile; passthrough whitelists `--profile` |
 | 4 | ~120 | `internal/proxy/handler.go` | Path-prefix routing + per-profile auth_style + header_overrides |
-| 5 | ~30  | `internal/proxy/capture.go`, `internal/process/process.go` | `profile` field in capture events |
+| 5 | ~15  | `internal/proxy/capture.go` | Write `profile` into capture event (client-side only — proxy writes capture.jsonl) |
 | 6 | ~40  | `internal/doctor/doctor.go` | Doctor checks each profile resolves and base_url is reachable |
-| 7 | ~30  | ClickHouse schema migration | `ALTER TABLE events ADD COLUMN profile` |
-| 8 | ~50  | `README.md`, `CHANGELOG.md`, `docs/profiles.md` | Document end-to-end |
+| 7 | ~50  | `README.md`, `CHANGELOG.md`, `docs/profiles.md` | Document end-to-end |
 
-**Total: ~480 LOC + tests.**
+**Total: ~435 LOC + tests. Client-side only.** No marc-server changes, no ClickHouse migration.
 
 Phases 1–3 ship without proxy changes — they hit the existing single Anthropic upstream regardless of profile. Useful as a first-PR milestone (client-side resolution + flag parsing). Phase 4 is the one that actually unlocks Minimax/OpenAI; can ship as second PR.
 
