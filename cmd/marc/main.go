@@ -52,7 +52,7 @@ func main() {
 // claude's.
 func isClaudePassthrough(args []string) bool {
 	if len(args) == 0 {
-		return false
+		return true
 	}
 	switch args[0] {
 	case "proxy", "ship", "configure", "install", "doctor", "version", "update",
@@ -75,11 +75,10 @@ var rootCmd = &cobra.Command{
 It proxies Claude Code API calls, captures conversations, and ships
 them to MinIO for server-side processing.
 
-Running marc with arguments that aren't a marc subcommand spawns
-` + "`claude`" + ` with ANTHROPIC_BASE_URL pointed at the proxy, so
-` + "`marc --continue`" + ` opens a captured Claude Code session
-without requiring a permanently-exported env var. Use plain
-` + "`claude`" + ` (no marc) when you don't want the session captured.`,
+Running marc with no arguments (or with arguments that aren't a marc
+subcommand) spawns ` + "`claude`" + ` with ANTHROPIC_BASE_URL pointed at the
+proxy. Use plain ` + "`claude`" + ` (no marc) when you don't want the session
+captured.`,
 }
 
 func init() {

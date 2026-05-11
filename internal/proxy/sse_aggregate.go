@@ -173,6 +173,10 @@ func processSSEEvent(
 				prev, _ := block["thinking"].(string)
 				block["thinking"] = prev + t
 			}
+		case "signature_delta":
+			if sig, ok := delta["signature"].(string); ok {
+				block["signature"] = sig
+			}
 		case "input_json_delta":
 			if pj, ok := delta["partial_json"].(string); ok {
 				if buf, exists := toolPartials[int(idx)]; exists {

@@ -8,8 +8,8 @@ func TestIsClaudePassthrough(t *testing.T) {
 		want bool
 		why  string
 	}{
-		// Empty args → cobra shows root help.
-		{[]string{}, false, "no args"},
+		// Empty args → start a new Claude session (passthrough with no flags).
+		{[]string{}, true, "no args"},
 
 		// Marc subcommands.
 		{[]string{"proxy"}, false, "marc subcommand"},

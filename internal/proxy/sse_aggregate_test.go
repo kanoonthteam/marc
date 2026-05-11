@@ -75,6 +75,47 @@ func TestAggregateSSE_NoTrailingBlankLine(t *testing.T) {
 	}
 }
 
+// TestAggregateSSE_ThinkingBlockSignature verifies that the signature_delta
+// emitted by Anthropic extended-thinking streams is preserved in the aggregated
+// response. Without the signature, any downstream request that passes the
+// thinking block back in conversation history is rejected with
+// "Invalid signature in thinking block".
+func TestAggregateSSE_ThinkingBlockSignature(t *testing.T) {
+	stream := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"m\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-opus-4-7\",\"content\":[],\"usage\":{\"input_tokens\":10}}}\n\n" +
+		"event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\n" +
+		"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"Let me think\"}}\n\n" +
+		"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"abc123sig\"}}\n\n" +
+		"event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n" +
+		"event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n" +
+		"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n" +
+		"event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\n" +
+		"event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\n" +
+		"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+
+	out := aggregateSSE([]byte(stream))
+	if len(out) == 0 {
+		t.Fatal("aggregateSSE returned empty for a thinking stream")
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(out, &resp); err != nil {
+		t.Fatalf("aggregated response is not valid JSON: %v", err)
+	}
+	content, _ := resp["content"].([]any)
+	if len(content) != 2 {
+		t.Fatalf("want 2 content blocks, got %d: %s", len(content), string(out))
+	}
+	thinking, _ := content[0].(map[string]any)
+	if thinking["type"] != "thinking" {
+		t.Errorf("block[0].type = %v, want thinking", thinking["type"])
+	}
+	if got, _ := thinking["thinking"].(string); got != "Let me think" {
+		t.Errorf("block[0].thinking = %q, want %q", got, "Let me think")
+	}
+	if got, _ := thinking["signature"].(string); got != "abc123sig" {
+		t.Errorf("block[0].signature = %q, want %q", got, "abc123sig")
+	}
+}
+
 // TestAggregateSSE_StreamSSEFormat — replicate exactly what streamSSE writes
 // (every line gets a single \n appended, blank lines included). This is the
 // canonical input the aggregator sees in production.
