@@ -35,7 +35,7 @@ LOG_PATH = LOG_DIR / "marc-bot-tick.log"
 
 MARC_STATE_DB = os.environ.get(
     "MARC_STATE_DB",
-    os.path.expanduser("~/.marc/state.db"),
+    "/var/lib/marc/state/state.db",
 )
 
 logging.basicConfig(
