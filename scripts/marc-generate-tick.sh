@@ -48,7 +48,7 @@ fi
 # Route claude -p through marc proxy so the call gets X-Marc-Internal-tagged
 # (so it doesn't pollute the corpus with self-loop captures). The proxy default
 # is 18082; override via ANTHROPIC_BASE_URL in the env if you've moved it.
-export ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-http://127.0.0.1:18082}"
+export ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-http://127.0.0.1:8082}"
 
 # Fire one cycle. Output (structured JSON logs from slog) goes to the rotating file.
 {
