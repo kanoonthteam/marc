@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/caffeaun/marc/internal/clickhouse"
@@ -118,20 +119,28 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// --- 3. Query ClickHouse ---
-	// The SQL below is verbatim from the spec (T018 AC #1). The database name
-	// and LIMIT are interpolated from config, but the column list, predicates,
-	// and ordering are fixed.
 	dbName := cfg.ClickHouse.Database
 	limit := cfg.Scheduler.EventsPerGeneration
+
+	// Read the cursor so we only process events newer than the last cycle.
+	cursor, err := db.GetQuestionGenCursor(ctx)
+	if err != nil {
+		return fmt.Errorf("generate: get cursor: %w", err)
+	}
+	// ClickHouse DateTime64 comparisons require 'YYYY-MM-DD HH:MM:SS' format,
+	// not RFC3339 with a 'Z' suffix.
+	cursorStr := cursor.UTC().Format("2006-01-02 15:04:05")
+
 	sql := fmt.Sprintf(
 		"SELECT event_id, project_id, summary, user_text, assistant_text, captured_at"+
 			" FROM %s.events"+
 			" WHERE has_decision = true"+
+			" AND captured_at > '%s'"+
 			" AND captured_at > now() - INTERVAL 1 MONTH"+
 			" AND is_internal = false"+
-			" ORDER BY captured_at DESC"+
+			" ORDER BY captured_at ASC"+
 			" LIMIT %d",
-		dbName, limit,
+		dbName, cursorStr, limit,
 	)
 
 	rows, err := chClient.QueryEvents(ctx, sql)
@@ -254,7 +263,8 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	var candidates []CandidateQuestion
-	if err := json.Unmarshal([]byte(envelope.Result), &candidates); err != nil {
+	resultJSON := stripMarkdownFence(envelope.Result)
+	if err := json.Unmarshal([]byte(resultJSON), &candidates); err != nil {
 		logger.Error("generate: failed to parse candidates JSON from model output",
 			slog.String("error", err.Error()),
 			slog.String("result_sample", truncate(envelope.Result, 200)),
@@ -379,6 +389,20 @@ func runClaude(ctx context.Context, binary, prompt string, env []string) (stdout
 
 	err = cmd.Run()
 	return outBuf.Bytes(), errBuf.Bytes(), err
+}
+
+// stripMarkdownFence removes a leading ```json or ``` fence and trailing ```
+// that some model versions wrap around JSON output.
+func stripMarkdownFence(s string) string {
+	s = strings.TrimSpace(s)
+	for _, prefix := range []string{"```json", "```"} {
+		if strings.HasPrefix(s, prefix) {
+			s = strings.TrimPrefix(s, prefix)
+			s = strings.TrimSuffix(strings.TrimSpace(s), "```")
+			return strings.TrimSpace(s)
+		}
+	}
+	return s
 }
 
 // truncate returns s truncated to at most maxLen runes, with "..." appended

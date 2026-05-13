@@ -417,6 +417,24 @@ func (d *DB) GetRecentByStatus(ctx context.Context, status string, limit int) ([
 	return out, nil
 }
 
+// GetQuestionGenCursor returns the last_event_ts from the singleton cursor row.
+// Returns the zero time when the row has never been updated (epoch default).
+func (d *DB) GetQuestionGenCursor(ctx context.Context) (time.Time, error) {
+	const q = `SELECT last_event_ts FROM question_gen_cursor WHERE id = 1`
+	var tsStr string
+	if err := d.db.QueryRowContext(ctx, q).Scan(&tsStr); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return time.Time{}, nil
+		}
+		return time.Time{}, fmt.Errorf("sqlitedb: GetQuestionGenCursor: %w", err)
+	}
+	t, err := time.Parse(time.RFC3339, tsStr)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("sqlitedb: GetQuestionGenCursor parse %q: %w", tsStr, err)
+	}
+	return t, nil
+}
+
 // UpdateQuestionGenCursor writes ts as the new last_event_ts for the singleton
 // cursor row (id = 1). It is called after each successful generation cycle to
 // record the timestamp of the newest event that was processed.

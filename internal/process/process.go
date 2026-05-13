@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -436,11 +437,8 @@ func (d *daemon) processJSONL(ctx context.Context, path string, skippedInternal,
 		// Denoise via Ollama.
 		dr, err := d.ollama.Denoise(ctx, d.denoiseModel, string(line))
 		if err != nil {
-			// Poison-pill: model produced a response that doesn't unmarshal as
-			// DenoiseResult. Retrying will deterministically reproduce the
-			// failure and would block the entire pipeline. Skip the event,
-			// log loudly, and let the rest of the batch drain so the cursor
-			// can advance past this object.
+			// Poison-pill: deterministic per-event failures that will never
+			// succeed on retry. Skip and let the rest of the batch drain.
 			if errors.Is(err, ollama.ErrUnparseableModelOutput) {
 				d.logger.Error("process: skipping event with unparseable model output (cursor will advance)",
 					slog.String("event_id", ev.EventID),
@@ -449,8 +447,20 @@ func (d *daemon) processJSONL(ctx context.Context, path string, skippedInternal,
 				)
 				continue
 			}
-			// AC#4: any other Ollama failure (network, timeout, non-200 status)
-			// is potentially transient → halt batch, cursor does not advance,
+			// A timeout on a specific event is also deterministic when the
+			// event is too large for the model to process within the deadline.
+			// Treat it as a poison pill so the pipeline can advance.
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() || errors.Is(err, context.DeadlineExceeded) {
+				d.logger.Error("process: skipping oversized event that timed out ollama (cursor will advance)",
+					slog.String("event_id", ev.EventID),
+					slog.String("denoise_model", d.denoiseModel),
+					slog.Any("error", err),
+				)
+				continue
+			}
+			// AC#4: other Ollama failures (connection refused, non-200 status)
+			// are potentially transient → halt batch, cursor does not advance,
 			// retry next cycle.
 			return fmt.Errorf("denoise event %s: %w", ev.EventID, err)
 		}

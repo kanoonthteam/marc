@@ -139,13 +139,14 @@ func TestRun_SQLExact(t *testing.T) {
 		t.Fatalf("Run returned error: %v", err)
 	}
 
-	// The exact SQL the spec mandates (AC #1). Database and LIMIT are from config.
+	// SQL must include cursor filter, 1-month window, and ASC order.
 	wantSQL := "SELECT event_id, project_id, summary, user_text, assistant_text, captured_at" +
 		" FROM marc.events" +
 		" WHERE has_decision = true" +
+		" AND captured_at > '1970-01-01 00:00:00'" +
 		" AND captured_at > now() - INTERVAL 1 MONTH" +
 		" AND is_internal = false" +
-		" ORDER BY captured_at DESC" +
+		" ORDER BY captured_at ASC" +
 		" LIMIT 30"
 
 	if chFake.queriedSQL != wantSQL {
