@@ -434,6 +434,19 @@ func (d *daemon) processJSONL(ctx context.Context, path string, skippedInternal,
 			continue
 		}
 
+		// Skip events too large for Ollama to process within its timeout.
+		// 100 KB is well above what qwen3:8b handles in 2 minutes; anything
+		// larger will deterministically time out and stall the pipeline.
+		const maxDenoiseBytes = 100 * 1024
+		if len(line) > maxDenoiseBytes {
+			d.logger.Warn("process: skipping oversized event (exceeds denoise limit)",
+				slog.String("event_id", ev.EventID),
+				slog.Int("size_bytes", len(line)),
+				slog.Int("limit_bytes", maxDenoiseBytes),
+			)
+			continue
+		}
+
 		// Denoise via Ollama.
 		dr, err := d.ollama.Denoise(ctx, d.denoiseModel, string(line))
 		if err != nil {
