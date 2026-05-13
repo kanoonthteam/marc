@@ -59,6 +59,22 @@ const (
 
 	sqlCreateIdxPendingStatus = `CREATE INDEX IF NOT EXISTS idx_pending_status
     ON pending_questions(status, generated_at);`
+
+	sqlCreateRawMessages = `CREATE TABLE IF NOT EXISTS raw_messages (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id        TEXT NOT NULL,
+    machine         TEXT NOT NULL,
+    message_index   INTEGER NOT NULL,
+    role            TEXT NOT NULL DEFAULT '',
+    message_json    TEXT NOT NULL,
+    captured_at     TEXT NOT NULL,
+    has_decision    INTEGER,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(event_id, message_index)
+);`
+
+	sqlCreateIdxRawMessages = `CREATE INDEX IF NOT EXISTS idx_raw_messages_event
+    ON raw_messages(event_id);`
 )
 
 // applySchema creates all four tables, the index, and seeds question_gen_cursor.
@@ -75,6 +91,8 @@ func applySchema(db *sql.DB) error {
 		{"seed question_gen_cursor", sqlSeedQuestionGenCursor},
 		{"create pending_questions", sqlCreatePendingQuestions},
 		{"create idx_pending_status", sqlCreateIdxPendingStatus},
+		{"create raw_messages", sqlCreateRawMessages},
+		{"create idx_raw_messages_event", sqlCreateIdxRawMessages},
 	}
 
 	for _, s := range stmts {

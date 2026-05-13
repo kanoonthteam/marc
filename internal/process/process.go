@@ -434,21 +434,31 @@ func (d *daemon) processJSONL(ctx context.Context, path string, skippedInternal,
 			continue
 		}
 
-		// Skip events too large for Ollama to process within its timeout.
-		// 100 KB is well above what qwen3:8b handles in 2 minutes; anything
-		// larger will deterministically time out and stall the pipeline.
-		const maxDenoiseBytes = 100 * 1024
-		if len(line) > maxDenoiseBytes {
-			d.logger.Warn("process: skipping oversized event (exceeds denoise limit)",
-				slog.String("event_id", ev.EventID),
-				slog.Int("size_bytes", len(line)),
-				slog.Int("limit_bytes", maxDenoiseBytes),
-			)
-			continue
+		// Extract individual messages for per-message denoising. Large events
+		// that contain many messages are split so each Ollama call stays small
+		// and never hits the 120-second timeout.
+		var msgs []json.RawMessage
+		if len(ev.Request) > 0 {
+			var req struct {
+				Messages []json.RawMessage `json:"messages"`
+			}
+			if jsonErr := json.Unmarshal(ev.Request, &req); jsonErr == nil {
+				msgs = req.Messages
+			}
 		}
 
-		// Denoise via Ollama.
-		dr, err := d.ollama.Denoise(ctx, d.denoiseModel, string(line))
+		var dr *ollama.DenoiseResult
+		var denoiseErr error
+		if len(msgs) > 1 {
+			d.logger.Info("process: denoising per message",
+				slog.String("event_id", ev.EventID),
+				slog.Int("message_count", len(msgs)),
+			)
+			dr, denoiseErr = d.denoiseByMessages(ctx, ev, msgs)
+		} else {
+			dr, denoiseErr = d.ollama.Denoise(ctx, d.denoiseModel, string(line))
+		}
+		err = denoiseErr
 		if err != nil {
 			// Poison-pill: deterministic per-event failures that will never
 			// succeed on retry. Skip and let the rest of the batch drain.
@@ -499,4 +509,123 @@ func (d *daemon) processJSONL(ctx context.Context, path string, skippedInternal,
 	}
 
 	return nil
+}
+
+// denoiseByMessages splits a multi-message event into individual messages,
+// saves each to SQLite, denoises each through Ollama separately, and returns
+// an aggregated DenoiseResult. This avoids sending large events that would
+// timeout the 120-second Ollama deadline.
+//
+// Message-level poison pills (ErrUnparseableModelOutput, timeout) are logged
+// and skipped — the aggregation continues with whatever messages succeed.
+// Transient errors (connection refused) are returned to the caller so the
+// batch halts and retries next cycle.
+func (d *daemon) denoiseByMessages(ctx context.Context, ev jsonl.CaptureEvent, msgs []json.RawMessage) (*ollama.DenoiseResult, error) {
+	agg := &ollama.DenoiseResult{}
+	var userParts, assistantParts, summaryParts []string
+
+	for i, msgJSON := range msgs {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		var msgObj struct {
+			Role string `json:"role"`
+		}
+		_ = json.Unmarshal(msgJSON, &msgObj)
+
+		rm := sqlitedb.RawMessage{
+			EventID:      ev.EventID,
+			Machine:      ev.Machine,
+			MessageIndex: i,
+			Role:         msgObj.Role,
+			MessageJSON:  string(msgJSON),
+			CapturedAt:   ev.CapturedAt,
+		}
+		rmID, saveErr := d.db.InsertRawMessage(ctx, rm)
+		if saveErr != nil {
+			d.logger.Warn("process: save raw message",
+				slog.String("event_id", ev.EventID),
+				slog.Int("index", i),
+				slog.Any("error", saveErr),
+			)
+		}
+
+		miniJSON := buildMiniEventJSON(ev, msgJSON)
+		dr, err := d.ollama.Denoise(ctx, d.denoiseModel, miniJSON)
+		if err != nil {
+			if errors.Is(err, ollama.ErrUnparseableModelOutput) {
+				d.logger.Warn("process: skip message with unparseable output",
+					slog.String("event_id", ev.EventID),
+					slog.Int("message_index", i),
+					slog.Any("error", err),
+				)
+				continue
+			}
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() || errors.Is(err, context.DeadlineExceeded) {
+				d.logger.Warn("process: skip message that timed out ollama",
+					slog.String("event_id", ev.EventID),
+					slog.Int("message_index", i),
+					slog.Any("error", err),
+				)
+				continue
+			}
+			return nil, fmt.Errorf("denoise message %d of event %s: %w", i, ev.EventID, err)
+		}
+
+		if rmID > 0 {
+			if updateErr := d.db.UpdateRawMessageDecision(ctx, rmID, dr.HasDecision); updateErr != nil {
+				d.logger.Warn("process: update raw message decision",
+					slog.String("event_id", ev.EventID),
+					slog.Int("message_index", i),
+					slog.Any("error", updateErr),
+				)
+			}
+		}
+
+		if dr.HasDecision {
+			agg.HasDecision = true
+		}
+		if dr.UserText != "" {
+			userParts = append(userParts, dr.UserText)
+		}
+		if dr.AssistantText != "" {
+			assistantParts = append(assistantParts, dr.AssistantText)
+		}
+		if dr.Summary != "" {
+			summaryParts = append(summaryParts, dr.Summary)
+		}
+	}
+
+	if len(userParts) > 0 {
+		agg.UserText = userParts[len(userParts)-1]
+	}
+	if len(assistantParts) > 0 {
+		agg.AssistantText = assistantParts[len(assistantParts)-1]
+	}
+	if len(summaryParts) > 0 {
+		agg.Summary = strings.Join(summaryParts, " | ")
+	}
+
+	return agg, nil
+}
+
+// buildMiniEventJSON wraps a single message in a minimal CaptureEvent-shaped
+// JSON so the denoise prompt receives a familiar structure.
+func buildMiniEventJSON(ev jsonl.CaptureEvent, msgJSON json.RawMessage) string {
+	mini := map[string]any{
+		"event_id":    ev.EventID,
+		"machine":     ev.Machine,
+		"captured_at": ev.CapturedAt.UTC().Format(time.RFC3339),
+		"is_internal": ev.IsInternal,
+		"request": map[string]any{
+			"messages": []json.RawMessage{msgJSON},
+		},
+	}
+	b, err := json.Marshal(mini)
+	if err != nil {
+		return string(msgJSON)
+	}
+	return string(b)
 }

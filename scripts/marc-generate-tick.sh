@@ -39,9 +39,9 @@ if [[ -z "${MARC_SERVER}" ]]; then
     exit 1
 fi
 
-CONFIG="${MARC_SERVER_CONFIG:-${HOME}/.marc/server.toml}"
+CONFIG="${MARC_SERVER_CONFIG:-/etc/marc/server.toml}"
 if [[ ! -f "${CONFIG}" ]]; then
-    echo "[$(date -Iseconds)] ERROR config not found at ${CONFIG} — set MARC_SERVER_CONFIG or place it at ~/.marc/server.toml" >> "${LOG_FILE}"
+    echo "[$(date -Iseconds)] ERROR config not found at ${CONFIG} — set MARC_SERVER_CONFIG or place it at /etc/marc/server.toml" >> "${LOG_FILE}"
     exit 1
 fi
 
