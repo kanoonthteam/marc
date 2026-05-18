@@ -13,6 +13,7 @@ commands) is handled in telegram-commands.py.
 No external Python deps beyond stdlib + requests.
 """
 
+import html
 import json
 import logging
 import os
@@ -110,13 +111,17 @@ def mark_sent(conn: sqlite3.Connection, qid: int, message_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 def format_html(q) -> str:
+    # Escape every dynamic field — generated text routinely contains `<`, `>`,
+    # `&` (e.g. "components/<feature>/") which Telegram's HTML parse_mode
+    # otherwise rejects as unsupported tags, leaving the row stuck at 'ready'.
+    esc = lambda s: html.escape(s or "")
     return (
         f"<b>marc-question-{q['question_id']}</b>\n\n"
-        f"<b>Situation</b>\n{q['situation']}\n\n"
-        f"<b>Question</b>\n{q['question']}\n\n"
-        f"<b>A)</b> {q['option_a']}\n"
-        f"<b>B)</b> {q['option_b']}\n\n"
-        f"<i>Principle: {q['principle_tested']}</i>\n"
+        f"<b>Situation</b>\n{esc(q['situation'])}\n\n"
+        f"<b>Question</b>\n{esc(q['question'])}\n\n"
+        f"<b>A)</b> {esc(q['option_a'])}\n"
+        f"<b>B)</b> {esc(q['option_b'])}\n\n"
+        f"<i>Principle: {esc(q['principle_tested'])}</i>\n"
         f"<i>Reply text: <code>a {q['question_id']} A|B|S</code> or <code>a {q['question_id']} O reason</code></i>"
     )
 

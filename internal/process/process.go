@@ -25,6 +25,13 @@ import (
 
 const defaultPollInterval = 60 * time.Second
 
+// ErrCorruptObject signals that a MinIO object's metadata size disagrees with
+// the bytes the server actually streams (e.g. a shipper crashed mid-upload and
+// left a truncated body behind a complete-looking listing). It's a permanent
+// per-object condition — retrying never repairs it — so callers advance the
+// cursor past the key instead of halting the whole batch.
+var ErrCorruptObject = errors.New("process: corrupt minio object (size mismatch)")
+
 // Options configures the process daemon. All service constructor fields default
 // to the production implementations when nil.
 type Options struct {
@@ -308,7 +315,27 @@ func (d *daemon) processMachine(ctx context.Context, machine string) {
 			return
 		}
 		if err := d.processObject(ctx, machine, key); err != nil {
-			// Halt batch on any object error; cursor not advanced.
+			// Permanently corrupt object → advance cursor past it so the
+			// 1,900-file backlog behind it can drain. Don't archive (we
+			// never had the bytes); the truncated key stays in raw/ as a
+			// breadcrumb for manual cleanup.
+			if errors.Is(err, ErrCorruptObject) {
+				d.logger.Error("process: skipping corrupt minio object (cursor will advance)",
+					slog.String("machine", machine),
+					slog.String("key", key),
+					slog.Any("error", err),
+				)
+				if upsertErr := d.db.UpsertCursor(ctx, machine, key); upsertErr != nil {
+					d.logger.Error("process: advance cursor past corrupt object failed",
+						slog.String("machine", machine),
+						slog.String("key", key),
+						slog.Any("error", upsertErr),
+					)
+					return
+				}
+				continue
+			}
+			// All other errors halt the batch; cursor not advanced.
 			d.logger.Error("process: object processing failed; halting batch for this cycle",
 				slog.String("machine", machine),
 				slog.String("key", key),
@@ -390,6 +417,12 @@ func (d *daemon) downloadToStaging(ctx context.Context, key, stagingPath string)
 	defer f.Close()
 
 	if _, err := io.Copy(f, rc); err != nil {
+		// io.ErrUnexpectedEOF here means MinIO's stored body is shorter than
+		// the object's listed Content-Length — a permanent corruption, not a
+		// transient network blip. Flag it so the caller can advance past.
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			return fmt.Errorf("write staging file: %w: %w", ErrCorruptObject, err)
+		}
 		return fmt.Errorf("write staging file: %w", err)
 	}
 	return nil
