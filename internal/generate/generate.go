@@ -192,6 +192,31 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}
 
+	// Dedup channel: tell the model what's already queued (ready) and recently
+	// sent so it doesn't keep producing paraphrases of the same principle. The
+	// generator otherwise has no cross-cycle memory and will happily re-emit
+	// "co-locate by feature domain" 20 times in a row when consecutive event
+	// batches stay on the same topic.
+	const dedupLimit = 40
+	ready, _ := db.GetRecentByStatus(ctx, "ready", dedupLimit)
+	sent, _ := db.GetRecentByStatus(ctx, "sent", dedupLimit)
+	if len(ready) > 0 || len(sent) > 0 {
+		queueJSON, err := json.Marshal(map[string]any{
+			"ready_in_queue":   shapeFeedbackExamples(ready),
+			"recently_sent":    shapeFeedbackExamples(sent),
+		})
+		if err == nil {
+			prompt = prompt + "\n\n## Already in the queue — DO NOT regenerate variants\n\n" +
+				"These questions are already pending (ready) or have already been delivered " +
+				"to the user (sent). For every source event in this batch, check whether the " +
+				"decision it captures would produce a question whose `principle_tested` is " +
+				"semantically equivalent to one already in this list — even with different " +
+				"phrasing. If so, SKIP that event. Returning [] is correct when every event " +
+				"in the batch is already covered.\n\n" +
+				string(queueJSON)
+		}
+	}
+
 	// Serialize events as a JSON array appended to the prompt.
 	eventsJSON, err := json.Marshal(rows)
 	if err != nil {
