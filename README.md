@@ -542,6 +542,36 @@ By design, capture events do **not** include the profile name. The denoise → r
 
 ---
 
+## Crash-loop guard
+
+`marc` runs `claude` once and propagates its exit code. To stop a crashing session from spiraling, marc records every passthrough run to a per-directory ledger (`~/.marc/runs.jsonl`) and classifies the exit. If `claude` is OS-killed (exit 137 / SIGKILL — usually the OOM killer), marc prints a one-line explainer; resuming that session with `--continue` would re-run the same work and re-crash.
+
+Before a resume (`--continue` / `-c` / `--resume`), marc checks the consecutive-abnormal streak for the current directory. At `crash_loop_threshold` (default **2**) it applies the configured action and you can always override with `--force-continue` (a marc-only flag, never passed to claude):
+
+```toml
+[guard]
+  crash_loop_threshold = 2        # 0 → default 2; negative disables the guard
+  on_crash_loop = "warn"          # warn | backoff | prompt | fresh | block
+  # backoff_base_seconds = 5      # for on_crash_loop = "backoff"
+  # backoff_cap_seconds  = 120
+  # backoff_jitter       = 0.5
+```
+
+- **warn** (default): print a banner explaining the streak, then resume anyway.
+- **backoff**: cool down for a jittered exponential delay (5 s → 120 s, ±50 %), then resume.
+- **prompt**: ask `[y/N]` before resuming (auto-aborts when stdin isn't a terminal).
+- **fresh**: drop the resume flags and start a clean session instead.
+- **block**: refuse to resume; fix the cause and re-run with `--force-continue`.
+
+```bash
+marc --continue                 # guarded
+marc --force-continue --continue  # bypass the guard for this run
+```
+
+The guard only ever inspects resume invocations; a clean (exit 0) run resets the streak. It runs entirely client-side and writes nothing to the captured corpus.
+
+---
+
 ## Subcommand reference
 
 ### `marc` (client binary, all platforms)

@@ -62,13 +62,17 @@ func Run(opts Options) error {
 		stderr = os.Stderr
 	}
 
+	// Strip the marc-level --force-continue flag (never forwarded to claude);
+	// it overrides the crash-loop guard for this invocation.
+	forceContinue, args := parseForceContinue(opts.Args)
+
 	cfg, listenAddr, err := loadConfigAndAddr(opts.ConfigPath)
 	if err != nil {
 		return fmt.Errorf("marc: %w", err)
 	}
 
 	// Strip --profile from args and resolve to a real profile.
-	profileFlag, claudeArgs := ParseProfileFlag(opts.Args)
+	profileFlag, claudeArgs := ParseProfileFlag(args)
 	profileName := ResolveProfileName(profileFlag, cfg)
 	resolvedName, _, profErr := cfg.ResolveProfile(profileName)
 	if profErr != nil {
@@ -100,19 +104,52 @@ func Run(opts Options) error {
 
 	baseURL := "http://" + listenAddr + "/" + resolvedName
 
+	stdin := opts.Stdin
+	if stdin == nil {
+		stdin = os.Stdin
+	}
+
+	// Crash-loop guard: before resuming a session in this directory, consult
+	// the run ledger and apply the configured policy (warn/backoff/prompt/
+	// fresh/block). --force-continue bypasses it.
+	cwd, _ := os.Getwd()
+	if !forceContinue && wantsResume(claudeArgs) {
+		proceed, ga := guardResume(resolveGuard(cfg.Guard), cwd, claudeArgs, stdin, stderr)
+		if !proceed {
+			return nil
+		}
+		claudeArgs = ga
+	}
+
 	cmd := exec.Command(resolved, claudeArgs...)
 	cmd.Env = withEnv(os.Environ(), "ANTHROPIC_BASE_URL", baseURL)
-	cmd.Stdin = opts.Stdin
-	if cmd.Stdin == nil {
-		cmd.Stdin = os.Stdin
-	}
+	cmd.Stdin = stdin
 	cmd.Stdout = opts.Stdout
 	if cmd.Stdout == nil {
 		cmd.Stdout = os.Stdout
 	}
 	cmd.Stderr = stderr
 
-	return cmd.Run()
+	// Run claude, then record the outcome to the ledger and surface a
+	// one-line explainer on abnormal endings — so the operator knows why it
+	// ended and whether resuming will help (the hermes-agent "explainer"
+	// pattern, applied at the supervisor layer).
+	start := time.Now()
+	runErr := cmd.Run()
+	info := classifyExit(cmd.ProcessState)
+	_ = appendRun(RunRecord{
+		TS:         nowRFC3339(),
+		CWD:        cwd,
+		Resume:     wantsResume(claudeArgs),
+		ExitCode:   info.Code,
+		Signal:     info.Signal,
+		Reason:     info.Reason,
+		DurationMS: time.Since(start).Milliseconds(),
+	})
+	if info.abnormal() && info.Advice != "" {
+		fmt.Fprintf(stderr, "\nmarc: session ended — %s. %s\n", info.Reason, info.Advice)
+	}
+	return runErr
 }
 
 // loadConfigAndAddr loads the client config and returns the resolved proxy

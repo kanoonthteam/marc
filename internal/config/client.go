@@ -81,6 +81,24 @@ type ClientProfile struct {
 	HeaderOverrides map[string]string `toml:"header_overrides"`
 }
 
+// ClientGuard configures the crash-loop guard for `marc --continue`
+// passthrough. All fields are optional; zero values fall back to built-in
+// defaults (see clauderun.GuardSettings): threshold 2, mode "warn", backoff
+// base 5s / cap 120s / jitter 0.5.
+type ClientGuard struct {
+	// CrashLoopThreshold is the number of consecutive abnormal exits in the
+	// current directory that trips the guard. 0 → default (2). Negative
+	// disables the guard.
+	CrashLoopThreshold int `toml:"crash_loop_threshold"`
+	// OnCrashLoop selects the action when the guard trips:
+	// "warn" | "backoff" | "prompt" | "fresh" | "block". "" → "warn".
+	OnCrashLoop string `toml:"on_crash_loop"`
+	// Backoff parameters for the "backoff" action (seconds; 0 → defaults).
+	BackoffBaseSeconds float64 `toml:"backoff_base_seconds"`
+	BackoffCapSeconds  float64 `toml:"backoff_cap_seconds"`
+	BackoffJitter      float64 `toml:"backoff_jitter"`
+}
+
 // ClientConfig is the top-level configuration for the marc client binary.
 // It is loaded from ~/.marc/config.toml (mode 0600).
 type ClientConfig struct {
@@ -90,6 +108,7 @@ type ClientConfig struct {
 	Shipper        ClientShipper            `toml:"shipper"`
 	MinIO          ClientMinIO              `toml:"minio"`
 	Anthropic      ClientAnthropic          `toml:"anthropic"`
+	Guard          ClientGuard              `toml:"guard"`
 	DefaultProfile string                   `toml:"default_profile"`
 	Profiles       map[string]ClientProfile `toml:"profiles"`
 }
