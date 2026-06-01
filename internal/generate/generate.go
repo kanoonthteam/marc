@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/caffeaun/marc/internal/clickhouse"
 	"github.com/caffeaun/marc/internal/config"
 	"github.com/caffeaun/marc/internal/sqlitedb"
@@ -127,15 +129,20 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("generate: get cursor: %w", err)
 	}
-	// ClickHouse DateTime64 comparisons require 'YYYY-MM-DD HH:MM:SS' format,
-	// not RFC3339 with a 'Z' suffix.
-	cursorStr := cursor.UTC().Format("2006-01-02 15:04:05")
+	// ClickHouse interprets unqualified datetime literals in *server local time*.
+	// Our cursor is a UTC time.Time, so we must pin the comparison to UTC via
+	// toDateTime64(?, 3, 'UTC') — otherwise the literal '2026-05-11 03:15:46'
+	// is read as BKK (the server's TZ), the cursor effectively rolls back 7
+	// hours, the same 30 events come back every cycle, and the cursor never
+	// advances. Include milliseconds in the literal so we don't re-emit the
+	// last second's events either.
+	cursorStr := cursor.UTC().Format("2006-01-02 15:04:05.000")
 
 	sql := fmt.Sprintf(
 		"SELECT event_id, project_id, summary, user_text, assistant_text, captured_at"+
 			" FROM %s.events"+
 			" WHERE has_decision = true"+
-			" AND captured_at > '%s'"+
+			" AND captured_at > toDateTime64('%s', 3, 'UTC')"+
 			" AND captured_at > now() - INTERVAL 1 MONTH"+
 			" AND is_internal = false"+
 			" ORDER BY captured_at ASC"+
@@ -160,9 +167,7 @@ func Run(ctx context.Context, opts Options) error {
 		if ts, ok := row["captured_at"].(time.Time); ok {
 			if ts.After(maxCapturedAt) {
 				maxCapturedAt = ts
-				if id, ok := row["event_id"].(string); ok {
-					mostRecentEventID = id
-				}
+				mostRecentEventID = eventIDToString(row["event_id"])
 			}
 		}
 	}
@@ -192,27 +197,27 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}
 
-	// Dedup channel: tell the model what's already queued (ready) and recently
-	// sent so it doesn't keep producing paraphrases of the same principle. The
-	// generator otherwise has no cross-cycle memory and will happily re-emit
-	// "co-locate by feature domain" 20 times in a row when consecutive event
-	// batches stay on the same topic.
-	const dedupLimit = 40
+	// Dedup channel: show the model a small recent slice of the queue so it
+	// prefers fresh principles over paraphrases. Earlier we framed this as
+	// "skip every event whose principle is already covered — returning [] is
+	// correct" — which combined with the system prompt's "0 is a valid output"
+	// caused the model to return [] for ~150 cycles in a row. Frame it as a
+	// preference signal instead, not a veto.
+	const dedupLimit = 12
 	ready, _ := db.GetRecentByStatus(ctx, "ready", dedupLimit)
 	sent, _ := db.GetRecentByStatus(ctx, "sent", dedupLimit)
 	if len(ready) > 0 || len(sent) > 0 {
 		queueJSON, err := json.Marshal(map[string]any{
-			"ready_in_queue":   shapeFeedbackExamples(ready),
-			"recently_sent":    shapeFeedbackExamples(sent),
+			"ready_in_queue": shapeFeedbackExamples(ready),
+			"recently_sent":  shapeFeedbackExamples(sent),
 		})
 		if err == nil {
-			prompt = prompt + "\n\n## Already in the queue — DO NOT regenerate variants\n\n" +
-				"These questions are already pending (ready) or have already been delivered " +
-				"to the user (sent). For every source event in this batch, check whether the " +
-				"decision it captures would produce a question whose `principle_tested` is " +
-				"semantically equivalent to one already in this list — even with different " +
-				"phrasing. If so, SKIP that event. Returning [] is correct when every event " +
-				"in the batch is already covered.\n\n" +
+			prompt = prompt + "\n\n## Recently queued — prefer fresh principles\n\n" +
+				"Below is a small sample of questions already in the queue. Use it as a " +
+				"diversity hint: when an event in this batch supports multiple plausible " +
+				"principles, prefer one NOT already represented here. Do NOT refuse to " +
+				"generate just because the broad topic appears — only skip when the question " +
+				"would be a near-paraphrase of one of these specific entries.\n\n" +
 				string(queueJSON)
 		}
 	}
@@ -317,7 +322,7 @@ func Run(ctx context.Context, opts Options) error {
 	// Collect all event IDs from the query result.
 	var allEventIDs []string
 	for _, row := range rows {
-		if id, ok := row["event_id"].(string); ok {
+		if id := eventIDToString(row["event_id"]); id != "" {
 			allEventIDs = append(allEventIDs, id)
 		}
 	}
@@ -438,4 +443,19 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return string(runes[:maxLen]) + "..."
+}
+
+// eventIDToString normalises the value clickhouse-go scans for a UUID column.
+// The driver returns uuid.UUID (not string), so a `.(string)` assertion
+// silently fails — and `mostRecentEventID` ends up empty across the board.
+// Accept both forms so a future driver change doesn't reintroduce the bug.
+func eventIDToString(v any) string {
+	switch x := v.(type) {
+	case uuid.UUID:
+		return x.String()
+	case string:
+		return x
+	default:
+		return ""
+	}
 }
