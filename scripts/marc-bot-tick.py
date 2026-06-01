@@ -10,6 +10,12 @@ The Telegram bot itself runs as the existing telegram-commands.service — this
 script just does the periodic outbound send. Inbound (button callbacks, text
 commands) is handled in telegram-commands.py.
 
+Bot credentials (token + chat_id) are read from the [telegram] section of the
+marc server config (/etc/marc/server.toml by default; override with
+MARC_SERVER_CONFIG) — the same 0600 file marc-server itself uses. The secret
+therefore lives in exactly one place outside the repo, never in a side-car
+telegram.conf that could be committed by accident.
+
 No external Python deps beyond stdlib + requests.
 """
 
@@ -19,6 +25,7 @@ import logging
 import os
 import sqlite3
 import sys
+import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,8 +35,7 @@ import requests
 # Config
 # ---------------------------------------------------------------------------
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-CONF_PATH = SCRIPT_DIR / "telegram.conf"
+MARC_SERVER_CONFIG = os.environ.get("MARC_SERVER_CONFIG", "/etc/marc/server.toml")
 LOG_DIR = Path.home() / "kanoonth" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_PATH = LOG_DIR / "marc-bot-tick.log"
@@ -48,16 +54,24 @@ log = logging.getLogger("marc-bot-tick")
 
 
 def load_telegram_conf():
-    token = chat = ""
-    with open(CONF_PATH) as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith("TELEGRAM_BOT_TOKEN="):
-                token = line.split("=", 1)[1].strip('"')
-            elif line.startswith("TELEGRAM_CHAT_ID="):
-                chat = line.split("=", 1)[1].strip('"')
+    """Read bot_token + chat_id from the [telegram] section of server.toml.
+
+    Same canonical 0600 config marc-server reads, so the secret has a single
+    source of truth outside the repo.
+    """
+    try:
+        with open(MARC_SERVER_CONFIG, "rb") as f:
+            cfg = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        log.error("cannot read marc server config %s: %s", MARC_SERVER_CONFIG, e)
+        sys.exit(1)
+    tg = cfg.get("telegram", {})
+    token = str(tg.get("bot_token", "")).strip()
+    chat = tg.get("chat_id", "")
     if not token or not chat:
-        log.error("missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID in %s", CONF_PATH)
+        log.error(
+            "missing telegram.bot_token or telegram.chat_id in %s", MARC_SERVER_CONFIG
+        )
         sys.exit(1)
     return token, int(chat)
 

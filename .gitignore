@@ -10,6 +10,10 @@
 vendor/
 dist/
 
+# Python (script tooling bytecode caches)
+__pycache__/
+*.pyc
+
 # macOS
 .DS_Store
 
@@ -31,3 +35,5 @@ dist/
 *.key
 credentials*.json
 secrets/
+# Legacy side-car bot creds — now read from /etc/marc/server.toml [telegram]
+scripts/telegram.conf
