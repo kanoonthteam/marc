@@ -381,6 +381,77 @@ func TestRun_CursorUpdated(t *testing.T) {
 	}
 }
 
+// ---- Backpressure: full queue skips generation but advances cursor ------
+
+// TestRun_BackpressureSkipsButAdvancesCursor verifies that when the ready
+// queue is already at MaxReadyQueue, Run does NOT call claude or insert new
+// questions, but DOES advance the cursor past the queried batch so the next
+// drain resumes from current events rather than re-mining this stale batch.
+func TestRun_BackpressureSkipsButAdvancesCursor(t *testing.T) {
+	t.Parallel()
+
+	later := time.Now().Add(-1 * time.Hour).UTC().Truncate(time.Second)
+	chFake := &fakeCHClient{
+		rows: []map[string]any{
+			{"event_id": "e1", "captured_at": later.Add(-time.Minute)},
+			{"event_id": "e2", "captured_at": later},
+		},
+	}
+	db := openTempSQLite(t)
+	cfg := minimalConfig()
+	cfg.Scheduler.MaxReadyQueue = 2 // tiny cap so the seeded rows fill it
+
+	// Seed exactly MaxReadyQueue ready questions.
+	for i := 0; i < cfg.Scheduler.MaxReadyQueue; i++ {
+		if _, err := db.InsertQuestion(context.Background(), sqlitedb.PendingQuestion{
+			ProjectID: "default", SeedEventID: "seed", Situation: "S", Question: "Q",
+			OptionA: "A", OptionB: "B", PrincipleTested: "p", DurabilityScore: 9,
+			ObviousnessScore: 3, GeneratedAt: time.Now().UTC(),
+		}); err != nil {
+			t.Fatalf("seed ready question: %v", err)
+		}
+	}
+
+	claudeCalled := false
+	if err := Run(context.Background(), Options{
+		Config: cfg,
+		NewClickHouseConn: func(_ config.ClickHouseConfig) (clickhouse.Client, error) {
+			return chFake, nil
+		},
+		SQLiteDB: db,
+		ClaudeRunner: func(_ context.Context, _ string, _ string, _ []string) ([]byte, []byte, error) {
+			claudeCalled = true
+			return fakeClaude(`[]`)(context.Background(), "", "", nil)
+		},
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if claudeCalled {
+		t.Error("claude was called despite a full ready queue; backpressure failed")
+	}
+
+	// No new questions: still exactly MaxReadyQueue ready.
+	ready, _, err := db.GetStats(context.Background())
+	if err != nil {
+		t.Fatalf("GetStats: %v", err)
+	}
+	if ready != cfg.Scheduler.MaxReadyQueue {
+		t.Errorf("ready count = %d, want %d (no inserts expected)", ready, cfg.Scheduler.MaxReadyQueue)
+	}
+
+	// Cursor still advanced to the latest captured_at so we stay current.
+	var gotTS string
+	if err := db.ExportDB().QueryRow(
+		`SELECT last_event_ts FROM question_gen_cursor WHERE id = 1`,
+	).Scan(&gotTS); err != nil {
+		t.Fatalf("scan cursor: %v", err)
+	}
+	if want := later.UTC().Format(time.RFC3339); gotTS != want {
+		t.Errorf("last_event_ts = %q, want %q (cursor must advance even when skipping)", gotTS, want)
+	}
+}
+
 // ---- AC #8: empty ClickHouse result is a no-op --------------------------
 
 // TestRun_EmptyClickHouse verifies that an empty result set causes Run to

@@ -172,6 +172,40 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}
 
+	// --- 3a. Backpressure ---
+	//
+	// Generation runs hourly but delivery is throttled (~20/weekday). Without a
+	// cap the ready queue grows ~5x faster than it drains, so the FIFO head
+	// falls weeks behind current work and the user keeps seeing stale questions.
+	// When the queue is already full, skip this cycle — but still advance the
+	// cursor past the events we just queried, so when the queue later drains we
+	// resume from *current* events rather than re-mining this old batch into
+	// stale questions. The corpus is curated, not exhaustive; sampling the most
+	// recent decisions is the desired behaviour.
+	maxReadyQueue := cfg.Scheduler.MaxReadyQueue
+	if maxReadyQueue <= 0 {
+		maxReadyQueue = 40
+	}
+	readyCount, _, statsErr := db.GetStats(ctx)
+	if statsErr != nil {
+		logger.Error("generate: count ready failed; proceeding without backpressure",
+			slog.String("error", statsErr.Error()),
+		)
+	} else if readyCount >= maxReadyQueue {
+		logger.Info("generate: ready queue full — skipping generation, advancing cursor",
+			slog.Int("ready", readyCount),
+			slog.Int("max_ready_queue", maxReadyQueue),
+		)
+		if !maxCapturedAt.IsZero() {
+			if err := db.UpdateQuestionGenCursor(ctx, maxCapturedAt); err != nil {
+				logger.Error("generate: advance cursor while queue-full failed",
+					slog.String("error", err.Error()),
+				)
+			}
+		}
+		return nil
+	}
+
 	// --- 4. Build prompt ---
 	prompt := questionGenPrompt()
 

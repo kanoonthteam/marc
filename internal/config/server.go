@@ -56,6 +56,13 @@ type SchedulerConfig struct {
 	TelegramSendCron   string `toml:"telegram_send_cron"`
 	Timezone           string `toml:"timezone"`
 	EventsPerGeneration int   `toml:"events_per_generation"`
+	// MaxReadyQueue caps how many 'ready' questions may sit in the queue.
+	// Generation runs hourly but delivery is throttled by telegram_send_cron
+	// (~20/weekday), so without a cap the queue grows unbounded and the FIFO
+	// head falls weeks behind current work. When ready >= MaxReadyQueue the
+	// generator skips the cycle (advancing its cursor to stay current) so the
+	// queue stays a small, fresh rolling buffer. Defaults to 40 if unset.
+	MaxReadyQueue int `toml:"max_ready_queue"`
 }
 
 // TelegramConfig holds Telegram bot credentials.
@@ -101,6 +108,12 @@ func LoadServer(path string) (*ServerConfig, error) {
 
 	if err := validateServer(&cfg); err != nil {
 		return nil, err
+	}
+
+	// Apply defaults for optional tuning fields so existing deployed configs
+	// (which predate the field) keep working without an edit.
+	if cfg.Scheduler.MaxReadyQueue <= 0 {
+		cfg.Scheduler.MaxReadyQueue = 40
 	}
 
 	return &cfg, nil
@@ -151,6 +164,9 @@ question_gen_cron = "0 * * * *"
 telegram_send_cron = "*/30 9-18 * * 1-5"
 timezone = "Asia/Bangkok"
 events_per_generation = 30
+# Cap the ready-question backlog so it stays a small, fresh rolling buffer
+# instead of growing faster than delivery drains it. Defaults to 40 if unset.
+max_ready_queue = 40
 
 [telegram]
 bot_token = "..."
