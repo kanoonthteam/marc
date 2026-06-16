@@ -31,3 +31,11 @@ func denoisePrompt() string {
 	}
 	return embeddedDenoisePrompt
 }
+
+// DenoisePrompt returns the denoise prompt text (the operator override at
+// /etc/marc/prompts/denoise.md when present, else the embedded default).
+// Exported so alternative denoise providers (e.g. internal/minimax) send the
+// exact same prompt as the Ollama path.
+func DenoisePrompt() string {
+	return denoisePrompt()
+}

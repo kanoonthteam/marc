@@ -18,6 +18,7 @@ import (
 	"github.com/caffeaun/marc/internal/clickhouse"
 	"github.com/caffeaun/marc/internal/config"
 	"github.com/caffeaun/marc/internal/jsonl"
+	"github.com/caffeaun/marc/internal/minimax"
 	"github.com/caffeaun/marc/internal/minioclient"
 	"github.com/caffeaun/marc/internal/ollama"
 	"github.com/caffeaun/marc/internal/sqlitedb"
@@ -137,24 +138,32 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	defer chClient.Close()
 
-	// Construct the Ollama client.
-	var ollamaClient ollama.Client
-	if opts.NewOllamaClient != nil {
-		ollamaClient = opts.NewOllamaClient(opts.Config.Ollama)
-	} else {
-		ollamaClient = ollama.New(opts.Config.Ollama)
+	// Construct the denoise client. The [denoise] provider selects Ollama
+	// (local, default) or MiniMax (hosted Anthropic-compatible API). Tests
+	// inject via NewOllamaClient, which always wins.
+	var denoiseClient ollama.Client
+	denoiseModel := opts.Config.Ollama.DenoiseModel
+	switch {
+	case opts.NewOllamaClient != nil:
+		denoiseClient = opts.NewOllamaClient(opts.Config.Ollama)
+	case opts.Config.Denoise.Provider == "minimax":
+		denoiseClient = minimax.New(opts.Config.MiniMax)
+		denoiseModel = opts.Config.MiniMax.Model
+		logger.Info("process: using minimax denoiser", slog.String("model", denoiseModel))
+	default:
+		denoiseClient = ollama.New(opts.Config.Ollama)
 	}
-	defer ollamaClient.Close()
+	defer denoiseClient.Close()
 
 	d := &daemon{
 		cfg:          opts.Config,
 		db:           db,
 		mc:           mc,
 		ch:           chClient,
-		ollama:       ollamaClient,
+		denoiser:     denoiseClient,
 		logger:       logger,
 		stagingDir:   opts.Config.MinIO.StagingDir,
-		denoiseModel: opts.Config.Ollama.DenoiseModel,
+		denoiseModel: denoiseModel,
 		machine:      opts.Config.MachineName,
 	}
 
@@ -180,7 +189,7 @@ type daemon struct {
 	db           *sqlitedb.DB
 	mc           minioclient.Client
 	ch           clickhouse.Client
-	ollama       ollama.Client
+	denoiser     ollama.Client
 	logger       *slog.Logger
 	stagingDir   string
 	denoiseModel string
@@ -494,10 +503,14 @@ func (d *daemon) processJSONL(ctx context.Context, path string, skippedInternal,
 		}
 
 		// Even after trimming, a single huge last message (e.g. a 200KB code
-		// paste or error log) will time out the 2-min Ollama deadline.
-		// These events rarely yield decision-bearing signal — skip them so
-		// the pipeline drains instead of burning two minutes per poison.
-		const maxDenoiseBytes = 80 * 1024
+		// paste or error log) can overwhelm a slow local denoiser. The cap is
+		// configurable (denoise.max_event_bytes) because a hosted provider like
+		// MiniMax handles ~150KB events in seconds, whereas local Ollama timed
+		// out — so the right ceiling depends on the backend.
+		maxDenoiseBytes := d.cfg.Denoise.MaxEventBytes
+		if maxDenoiseBytes <= 0 {
+			maxDenoiseBytes = 80 * 1024
+		}
 		if len(denoiseInput) > maxDenoiseBytes {
 			d.logger.Warn("process: skipping oversized event (last message too large)",
 				slog.String("event_id", ev.EventID),
@@ -507,7 +520,7 @@ func (d *daemon) processJSONL(ctx context.Context, path string, skippedInternal,
 			continue
 		}
 
-		dr, err := d.ollama.Denoise(ctx, d.denoiseModel, string(denoiseInput))
+		dr, err := d.denoiser.Denoise(ctx, d.denoiseModel, string(denoiseInput))
 		if err != nil {
 			// Poison-pill: deterministic per-event failures that will never
 			// succeed on retry. Skip and let the rest of the batch drain.

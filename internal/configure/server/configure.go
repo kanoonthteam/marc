@@ -26,6 +26,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/caffeaun/marc/internal/clickhouse"
 	"github.com/caffeaun/marc/internal/config"
+	"github.com/caffeaun/marc/internal/minimax"
 	"github.com/caffeaun/marc/internal/minioclient"
 	"github.com/caffeaun/marc/internal/ollama"
 )
@@ -375,8 +376,12 @@ func pingAllServices(ctx context.Context, cfg *config.ServerConfig, opts Options
 	// ClickHouse ping.
 	results = append(results, pingClickHouse(ctx, cfg.ClickHouse, opts.NewClickHouseConn))
 
-	// Ollama ping.
-	results = append(results, pingOllama(ctx, cfg.Ollama, opts.NewOllamaClient))
+	// Denoise ping — verify the active backend (Ollama or MiniMax).
+	if cfg.Denoise.Provider == "minimax" {
+		results = append(results, pingMiniMax(ctx, cfg.MiniMax))
+	} else {
+		results = append(results, pingOllama(ctx, cfg.Ollama, opts.NewOllamaClient))
+	}
 
 	// Telegram ping.
 	results = append(results, pingTelegram(ctx, cfg.Telegram.BotToken, opts.TelegramGetMe))
@@ -440,6 +445,18 @@ func pingOllama(
 		return serviceResult{Name: name, Passed: false, Message: err.Error()}
 	}
 	return serviceResult{Name: name, Passed: true, Message: "reachable and model loaded"}
+}
+
+// pingMiniMax constructs a MiniMax denoise client and pings it (verifying the
+// endpoint, key, and model with a minimal request).
+func pingMiniMax(ctx context.Context, cfg config.MiniMaxConfig) serviceResult {
+	name := "minimax"
+	mc := minimax.New(cfg)
+	defer mc.Close() //nolint:errcheck // close-on-check path; error not critical
+	if err := mc.Ping(ctx); err != nil {
+		return serviceResult{Name: name, Passed: false, Message: err.Error()}
+	}
+	return serviceResult{Name: name, Passed: true, Message: "reachable and model available"}
 }
 
 // pingTelegram checks whether a Telegram bot token is valid by calling getMe.

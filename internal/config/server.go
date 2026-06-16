@@ -50,12 +50,45 @@ type ClaudeConfig struct {
 	InternalHeader string `toml:"internal_header"`
 }
 
+// DenoiseConfig selects which backend denoises raw captures.
+type DenoiseConfig struct {
+	// Provider is "ollama" (local, default) or "minimax" (hosted
+	// Anthropic-Messages-compatible API). Unset defaults to "ollama".
+	Provider string `toml:"provider"`
+	// MaxEventBytes caps the size of a single trimmed event sent to the
+	// denoiser; larger events are skipped. The 80KB default suited local
+	// Ollama (which timed out on big inputs); a hosted provider like MiniMax
+	// handles ~150KB events in seconds, so operators can raise this to avoid
+	// dropping substantive coding sessions. Defaults to 81920 (80KB) if unset.
+	MaxEventBytes int `toml:"max_event_bytes"`
+}
+
+// MiniMaxConfig holds connection settings + the denoise model for the MiniMax
+// backend (used when denoise.provider = "minimax"). MiniMax speaks the
+// Anthropic Messages protocol at base_url + /v1/messages with bearer auth. The
+// same base_url/api_key are reused for MiniMax question generation; only the
+// model differs (see GenerationConfig.MinimaxModel).
+type MiniMaxConfig struct {
+	BaseURL string `toml:"base_url"`
+	APIKey  string `toml:"api_key"`
+	Model   string `toml:"model"`
+}
+
+// GenerationConfig controls the question-generation backend. Generation
+// normally shells out to `claude -p` (Opus). When RandomizeBackend is true the
+// generator flips a coin each cycle between Claude and MiniMax (MinimaxModel),
+// so the corpus isn't shaped by a single model's biases.
+type GenerationConfig struct {
+	RandomizeBackend bool   `toml:"randomize_backend"`
+	MinimaxModel     string `toml:"minimax_model"`
+}
+
 // SchedulerConfig holds cron expressions and scheduler tuning parameters.
 type SchedulerConfig struct {
-	QuestionGenCron    string `toml:"question_gen_cron"`
-	TelegramSendCron   string `toml:"telegram_send_cron"`
-	Timezone           string `toml:"timezone"`
-	EventsPerGeneration int   `toml:"events_per_generation"`
+	QuestionGenCron     string `toml:"question_gen_cron"`
+	TelegramSendCron    string `toml:"telegram_send_cron"`
+	Timezone            string `toml:"timezone"`
+	EventsPerGeneration int    `toml:"events_per_generation"`
 	// MaxReadyQueue caps how many 'ready' questions may sit in the queue.
 	// Generation runs hourly but delivery is throttled by telegram_send_cron
 	// (~20/weekday), so without a cap the queue grows unbounded and the FIFO
@@ -86,6 +119,9 @@ type ServerConfig struct {
 	ClickHouse  ClickHouseConfig  `toml:"clickhouse"`
 	SQLite      SQLiteConfig      `toml:"sqlite"`
 	Ollama      OllamaConfig      `toml:"ollama"`
+	Denoise     DenoiseConfig     `toml:"denoise"`
+	MiniMax     MiniMaxConfig     `toml:"minimax"`
+	Generation  GenerationConfig  `toml:"generation"`
 	Claude      ClaudeConfig      `toml:"claude"`
 	Scheduler   SchedulerConfig   `toml:"scheduler"`
 	Telegram    TelegramConfig    `toml:"telegram"`
@@ -114,6 +150,18 @@ func LoadServer(path string) (*ServerConfig, error) {
 	// (which predate the field) keep working without an edit.
 	if cfg.Scheduler.MaxReadyQueue <= 0 {
 		cfg.Scheduler.MaxReadyQueue = 40
+	}
+	if strings.TrimSpace(cfg.Denoise.Provider) == "" {
+		cfg.Denoise.Provider = "ollama"
+	}
+	if cfg.Denoise.MaxEventBytes <= 0 {
+		cfg.Denoise.MaxEventBytes = 80 * 1024
+	}
+	if strings.TrimSpace(cfg.MiniMax.BaseURL) == "" {
+		cfg.MiniMax.BaseURL = "https://api.minimax.io/anthropic"
+	}
+	if strings.TrimSpace(cfg.Generation.MinimaxModel) == "" {
+		cfg.Generation.MinimaxModel = "MiniMax-M3"
 	}
 
 	return &cfg, nil
@@ -154,6 +202,27 @@ path = "/var/lib/marc/state/state.db"
 [ollama]
 endpoint = "http://127.0.0.1:11434"
 denoise_model = "qwen3:8b"
+
+[denoise]
+# Denoise backend: "ollama" (local, default) or "minimax" (hosted API).
+provider = "ollama"
+# Skip events whose trimmed last message exceeds this many bytes. 80KB suits
+# local Ollama; hosted providers (minimax) handle ~150KB+ — raise to keep
+# substantive sessions. Defaults to 81920.
+max_event_bytes = 81920
+
+[minimax]
+# Used when denoise.provider = "minimax". Anthropic-Messages-compatible API.
+# model here is the DENOISE model — a small/fast one is plenty for extraction.
+base_url = "https://api.minimax.io/anthropic"
+api_key = "..."
+model = "MiniMax-M2.5-highspeed"
+
+[generation]
+# When true, each generation cycle randomly picks Claude (claude -p) or MiniMax
+# (minimax_model) so the corpus isn't shaped by one model's biases.
+randomize_backend = false
+minimax_model = "MiniMax-M3"
 
 [claude]
 binary = "claude"
@@ -203,6 +272,15 @@ func validateServer(cfg *ServerConfig) error {
 	}
 	if cfg.Telegram.ChatID == 0 {
 		return fmt.Errorf("config: required field %q is missing or zero", "telegram.chat_id")
+	}
+	// When the MiniMax denoiser is selected, its key and model are required.
+	if strings.TrimSpace(cfg.Denoise.Provider) == "minimax" {
+		if strings.TrimSpace(cfg.MiniMax.APIKey) == "" {
+			return fmt.Errorf("config: required field %q is missing or empty (denoise.provider = minimax)", "minimax.api_key")
+		}
+		if strings.TrimSpace(cfg.MiniMax.Model) == "" {
+			return fmt.Errorf("config: required field %q is missing or empty (denoise.provider = minimax)", "minimax.model")
+		}
 	}
 	return nil
 }
