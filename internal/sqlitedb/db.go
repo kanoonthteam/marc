@@ -39,6 +39,10 @@ type PendingQuestion struct {
 	AnsweredAt        *time.Time
 	TelegramMessageID *int64
 	AnswerEventID     string
+	// ActualOption is 'A' or 'B' — which displayed slot holds the path the
+	// user actually took. A/B positions are randomized at generation time to
+	// remove answer-position bias; this preserves the ground truth.
+	ActualOption string
 }
 
 // validStatuses is the set of allowed values for pending_questions.status.
@@ -240,15 +244,15 @@ func (d *DB) InsertQuestion(ctx context.Context, q PendingQuestion) (int64, erro
 	    project_id, seed_event_id, retrieved_event_ids,
 	    situation, question, option_a, option_b,
 	    principle_tested, durability_score, obviousness_score,
-	    status, generated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?)`
+	    status, generated_at, actual_option
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?)`
 
 	genAt := q.GeneratedAt.UTC().Format(time.RFC3339)
 	res, err := d.db.ExecContext(ctx, stmt,
 		q.ProjectID, q.SeedEventID, string(eventIDs),
 		q.Situation, q.Question, q.OptionA, q.OptionB,
 		q.PrincipleTested, q.DurabilityScore, q.ObviousnessScore,
-		genAt,
+		genAt, q.ActualOption,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("sqlitedb: InsertQuestion: %w", err)
@@ -571,4 +575,3 @@ func scanPendingQuestion(row rowScanner) (*PendingQuestion, error) {
 
 	return &pq, nil
 }
-

@@ -28,6 +28,15 @@ Input: a JSON array of recent denoised conversation events. Each event has `even
 - **`option_b` is a real alternative the user weighed.** If the source mentions an alternative considered ("I was going to X but..."), use that. If not, use the most natural counterpoint. Do not invent a strawman.
 - **If you can't extract a concrete decision from an event, skip it.** A summary like "user asked for clarification" or "assistant provided syntax help" yields zero questions. Stretching is worse than silence.
 
+## No-tell rule — the question must not reveal its own answer
+
+The two options are shown to the user in a **randomized order** (A/B is shuffled downstream), so do not rely on position. More importantly, a reader who does **not** know the source must not be able to guess which option was actually taken. Enforce this:
+
+- **Parallel options.** `option_a` and `option_b` must be parallel in length, specificity, and confidence. Don't write the taken path as a crisp, concrete, confident clause and the alternative as a vague or hedged one ("switch to webhooks for lower latency and load" vs. "maybe keep polling"). Either both are concrete with stated rationale, or both are terse — symmetric either way.
+- **No loaded language.** Don't smuggle the verdict into wording: no "naively", "properly", "cleanly", "of course", "the right way", scare quotes, or trailing justifications on only one side.
+- **`situation` must not leak the choice.** Strip outcome/result signals. "I was going to X but switched to Y" telegraphs that Y won — reframe as the open decision the user faced ("deciding between X and Y for …"). Describe the fork, not the resolution.
+- **Both genuinely defensible.** If, stripped of tells, the answer is still obvious to a competent practitioner, the question has no learning value — drop it (this is what `obviousness_score` measures).
+
 ## Domain neutrality
 
 The input events may span software engineering, marketing, trading, content drafting, ops, project management, or anything else the user works on. Do **not** default to programming framing. Let the source domain dictate the question. If the source is about trading positions, don't translate it into a Go question.

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
 	"os"
 	"os/exec"
 	"strings"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/caffeaun/marc/internal/clickhouse"
 	"github.com/caffeaun/marc/internal/config"
+	"github.com/caffeaun/marc/internal/minimax"
 	"github.com/caffeaun/marc/internal/sqlitedb"
 )
 
@@ -75,6 +77,12 @@ type Options struct {
 	SQLiteDB *sqlitedb.DB
 	// ClaudeRunner, if set, is called instead of launching the real subprocess.
 	ClaudeRunner func(ctx context.Context, binary, prompt string, env []string) (stdout, stderr []byte, err error)
+	// MinimaxGenerate, if set, replaces the real minimax.Generate call (the
+	// alternate generation backend). Tests inject this.
+	MinimaxGenerate func(ctx context.Context, cfg config.MiniMaxConfig, model, prompt string) (string, error)
+	// RandIntn, if set, replaces rand.Intn for deterministic tests (used for
+	// backend coin-flip and A/B shuffle). Must behave like math/rand.Intn.
+	RandIntn func(n int) int
 	// NowFn, if set, replaces time.Now for deterministic tests.
 	NowFn func() time.Time
 }
@@ -263,77 +271,95 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	prompt = prompt + "\n\n## Source events\n\n" + string(eventsJSON)
 
-	// --- 5. Invoke claude -p ---
+	// --- 5. Invoke the generation backend ---
 	//
-	// NOTE on --max-turns: The original spec included --max-turns 1, but this
-	// flag does not exist in `claude -p` version 2.1.119 (Claude Code). The
-	// `-p` flag already makes claude print a single response and exit, so
-	// --max-turns is redundant and has been dropped.
-	//
-	// NOTE on ANTHROPIC_CUSTOM_HEADERS: Verified (via a capture proxy) that
-	// `claude -p` version 2.1.119 faithfully forwards
-	// ANTHROPIC_CUSTOM_HEADERS=X-Marc-Internal: true in every POST to
-	// /v1/messages. No HTTP fallback path is needed; AC #3 (fallback) is moot
-	// for this CLI version.
-	binary := cfg.Claude.Binary
-	if binary == "" {
-		binary = "claude"
+	// Normally `claude -p` (Opus). When generation.randomize_backend is set we
+	// flip a coin each cycle and sometimes generate with MiniMax instead, so
+	// the corpus isn't shaped by a single model's phrasing and scoring biases.
+	// Both backends receive the identical prompt and return a JSON array of
+	// candidate questions, parsed identically below.
+	intn := opts.RandIntn
+	if intn == nil {
+		intn = rand.Intn
 	}
+	useMinimax := cfg.Generation.RandomizeBackend && intn(2) == 0
 
-	// Build environment: inherit all host env vars, then override/add ours.
-	// We do NOT force ANTHROPIC_BASE_URL — operators may point elsewhere via
-	// their own env.  If it is already set in the process environment it will
-	// be inherited unchanged.
-	env := os.Environ()
-	env = append(env, fmt.Sprintf("ANTHROPIC_CUSTOM_HEADERS=%s: true", cfg.Claude.InternalHeader))
-
-	var stdout, stderr []byte
-	var runErr error
-	if opts.ClaudeRunner != nil {
-		stdout, stderr, runErr = opts.ClaudeRunner(ctx, binary, prompt, env)
-	} else {
-		stdout, stderr, runErr = runClaude(ctx, binary, prompt, env)
-	}
-
-	// --- 6. Handle claude exit ---
-	if runErr != nil {
-		var exitErr *exec.ExitError
-		if errors.As(runErr, &exitErr) {
-			// Non-zero exit from claude: log + zero-insert + nil (retry next hour).
-			logger.Error("generate: claude -p exited with non-zero status",
-				slog.String("stderr", string(stderr)),
-				slog.Int("exit_code", exitErr.ExitCode()),
-			)
-			return nil
+	var resultText string
+	if useMinimax {
+		model := cfg.Generation.MinimaxModel
+		logger.Info("generate: using minimax backend", slog.String("model", model))
+		gen := opts.MinimaxGenerate
+		if gen == nil {
+			gen = minimax.Generate
 		}
-		// Binary not found, context deadline, or other OS-level failure.
-		return fmt.Errorf("generate: run claude: %w", runErr)
+		text, gerr := gen(ctx, cfg.MiniMax, model, prompt)
+		if gerr != nil {
+			logger.Error("generate: minimax generation failed", slog.String("error", gerr.Error()))
+			return nil // soft failure: retry next hour
+		}
+		resultText = text
+	} else {
+		// claude -p path. NOTE: --max-turns does not exist in claude 2.1.119;
+		// -p is already single-turn. ANTHROPIC_CUSTOM_HEADERS is forwarded
+		// faithfully so the self-call is tagged internal and not re-captured.
+		binary := cfg.Claude.Binary
+		if binary == "" {
+			binary = "claude"
+		}
+		env := os.Environ()
+		env = append(env, fmt.Sprintf("ANTHROPIC_CUSTOM_HEADERS=%s: true", cfg.Claude.InternalHeader))
+
+		var stdout, stderr []byte
+		var runErr error
+		if opts.ClaudeRunner != nil {
+			stdout, stderr, runErr = opts.ClaudeRunner(ctx, binary, prompt, env)
+		} else {
+			stdout, stderr, runErr = runClaude(ctx, binary, prompt, env)
+		}
+		if runErr != nil {
+			var exitErr *exec.ExitError
+			if errors.As(runErr, &exitErr) {
+				logger.Error("generate: claude -p exited with non-zero status",
+					slog.String("stderr", string(stderr)),
+					slog.Int("exit_code", exitErr.ExitCode()),
+				)
+				return nil
+			}
+			return fmt.Errorf("generate: run claude: %w", runErr)
+		}
+
+		var envelope claudeOutputEnvelope
+		if err := json.Unmarshal(stdout, &envelope); err != nil {
+			logger.Error("generate: failed to parse claude JSON envelope",
+				slog.String("error", err.Error()),
+				slog.String("stdout_sample", truncate(string(stdout), 200)),
+			)
+			return nil // soft failure: retry next hour
+		}
+		if envelope.IsError {
+			logger.Error("generate: claude returned is_error=true", slog.String("result", envelope.Result))
+			return nil // soft failure: retry next hour
+		}
+		resultText = envelope.Result
 	}
 
-	// --- 7. Parse claude output ---
-	var envelope claudeOutputEnvelope
-	if err := json.Unmarshal(stdout, &envelope); err != nil {
-		logger.Error("generate: failed to parse claude JSON envelope",
-			slog.String("error", err.Error()),
-			slog.String("stdout_sample", truncate(string(stdout), 200)),
-		)
-		return nil // soft failure: retry next hour
-	}
-	if envelope.IsError {
-		logger.Error("generate: claude returned is_error=true",
-			slog.String("result", envelope.Result),
-		)
-		return nil // soft failure: retry next hour
-	}
-
+	// --- 6. Parse candidates (identical for both backends) ---
 	var candidates []CandidateQuestion
-	resultJSON := stripMarkdownFence(envelope.Result)
+	resultJSON := stripMarkdownFence(resultText)
 	if err := json.Unmarshal([]byte(resultJSON), &candidates); err != nil {
-		logger.Error("generate: failed to parse candidates JSON from model output",
-			slog.String("error", err.Error()),
-			slog.String("result_sample", truncate(envelope.Result, 200)),
-		)
-		return nil // soft failure: retry next hour
+		// Despite "Return ONLY the JSON array", a model sometimes prefixes
+		// reasoning prose ("Let me work through the events: ...") before the
+		// array. Recover the array span and retry once before giving up.
+		if recovered := extractJSONArray(resultText); recovered != resultJSON {
+			err = json.Unmarshal([]byte(recovered), &candidates)
+		}
+		if err != nil {
+			logger.Error("generate: failed to parse candidates JSON from model output",
+				slog.String("error", err.Error()),
+				slog.String("result_sample", truncate(resultText, 200)),
+			)
+			return nil // soft failure: retry next hour
+		}
 	}
 
 	// --- 8. Filter ---
@@ -374,18 +400,29 @@ func Run(ctx context.Context, opts Options) error {
 			retrievedIDs = allEventIDs
 		}
 
+		// Randomize A/B position. The model emits option_a = the path actually
+		// taken / recommended and option_b = the rejected alternative, so the
+		// correct answer would otherwise always be A. Flip a coin per question
+		// and record which displayed slot holds the actual path, removing the
+		// position bias while preserving the ground-truth signal.
+		optA, optB, actual := c.OptionA, c.OptionB, "A"
+		if intn(2) == 0 {
+			optA, optB, actual = c.OptionB, c.OptionA, "B"
+		}
+
 		pq := sqlitedb.PendingQuestion{
 			ProjectID:         "default", // project is not yet per-question; use default
 			SeedEventID:       seedID,
 			RetrievedEventIDs: retrievedIDs,
 			Situation:         c.Situation,
 			Question:          c.Question,
-			OptionA:           c.OptionA,
-			OptionB:           c.OptionB,
+			OptionA:           optA,
+			OptionB:           optB,
 			PrincipleTested:   c.PrincipleTested,
 			DurabilityScore:   c.DurabilityScore,
 			ObviousnessScore:  c.ObviousnessScore,
 			GeneratedAt:       genAt,
+			ActualOption:      actual,
 		}
 
 		if _, err := db.InsertQuestion(ctx, pq); err != nil {
@@ -464,6 +501,31 @@ func stripMarkdownFence(s string) string {
 			s = strings.TrimPrefix(s, prefix)
 			s = strings.TrimSuffix(strings.TrimSpace(s), "```")
 			return strings.TrimSpace(s)
+		}
+	}
+	return s
+}
+
+// extractJSONArray tolerantly recovers a top-level JSON array from model output
+// that may be wrapped in reasoning prose (e.g. "Let me work through...\n[ ... ]")
+// or a code fence. It returns the first '[' position whose span to the last ']'
+// parses as valid JSON; on failure it returns s unchanged so the caller's error
+// path still fires.
+func extractJSONArray(s string) string {
+	s = strings.TrimSpace(s)
+	if json.Valid([]byte(s)) {
+		return s
+	}
+	end := strings.LastIndex(s, "]")
+	if end < 0 {
+		return s
+	}
+	for i := 0; i < end; i++ {
+		if s[i] != '[' {
+			continue
+		}
+		if cand := s[i : end+1]; json.Valid([]byte(cand)) {
+			return cand
 		}
 	}
 	return s

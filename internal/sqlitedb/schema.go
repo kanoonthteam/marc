@@ -4,6 +4,7 @@ package sqlitedb
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // DDL constants for the four marc SQLite tables and the required index.
@@ -54,11 +55,19 @@ const (
     sent_at             TEXT,
     answered_at         TEXT,
     telegram_message_id INTEGER,
-    answer_event_id     TEXT
+    answer_event_id     TEXT,
+    actual_option       TEXT
 );`
 
 	sqlCreateIdxPendingStatus = `CREATE INDEX IF NOT EXISTS idx_pending_status
     ON pending_questions(status, generated_at);`
+
+	// sqlAddActualOption back-fills the actual_option column on databases
+	// created before A/B positions were randomized. 'A'|'B' records which
+	// displayed slot holds the path the user actually took, so the learning
+	// signal survives the shuffle. Idempotent via the duplicate-column guard
+	// in applySchema.
+	sqlAddActualOption = `ALTER TABLE pending_questions ADD COLUMN actual_option TEXT;`
 )
 
 // applySchema creates all four tables, the index, and seeds question_gen_cursor.
@@ -81,6 +90,13 @@ func applySchema(db *sql.DB) error {
 		if _, err := db.Exec(s.sql); err != nil {
 			return fmt.Errorf("sqlitedb: %s: %w", s.name, err)
 		}
+	}
+
+	// Idempotent migrations for pre-existing databases. ADD COLUMN errors with
+	// "duplicate column name" when the column already exists — treat that as
+	// success so Open stays idempotent.
+	if _, err := db.Exec(sqlAddActualOption); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("sqlitedb: add actual_option column: %w", err)
 	}
 	return nil
 }
