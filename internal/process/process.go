@@ -155,16 +155,26 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	defer denoiseClient.Close()
 
+	var denoiseInterval time.Duration
+	if n := opts.Config.Denoise.MaxCallsPerMinute; n > 0 {
+		denoiseInterval = time.Minute / time.Duration(n)
+		logger.Info("process: denoise rate cap enabled",
+			slog.Int("max_calls_per_minute", n),
+			slog.Duration("min_interval", denoiseInterval),
+		)
+	}
+
 	d := &daemon{
-		cfg:          opts.Config,
-		db:           db,
-		mc:           mc,
-		ch:           chClient,
-		denoiser:     denoiseClient,
-		logger:       logger,
-		stagingDir:   opts.Config.MinIO.StagingDir,
-		denoiseModel: denoiseModel,
-		machine:      opts.Config.MachineName,
+		cfg:             opts.Config,
+		db:              db,
+		mc:              mc,
+		ch:              chClient,
+		denoiser:        denoiseClient,
+		logger:          logger,
+		stagingDir:      opts.Config.MinIO.StagingDir,
+		denoiseModel:    denoiseModel,
+		machine:         opts.Config.MachineName,
+		denoiseInterval: denoiseInterval,
 	}
 
 	ticker := time.NewTicker(opts.pollInterval())
@@ -194,6 +204,32 @@ type daemon struct {
 	stagingDir   string
 	denoiseModel string
 	machine      string
+
+	// Denoise rate gate: minimum spacing between denoise calls (0 = off) and
+	// the time of the last call. Single-threaded daemon, so no locking needed.
+	denoiseInterval time.Duration
+	lastDenoise     time.Time
+}
+
+// throttleDenoise blocks (respecting ctx) until at least denoiseInterval has
+// elapsed since the previous denoise call, capping the per-minute rate. It is a
+// no-op when the cap is disabled or when calls are naturally slower than the
+// interval (e.g. a slow model already under the cap).
+func (d *daemon) throttleDenoise(ctx context.Context) error {
+	if d.denoiseInterval <= 0 {
+		return nil
+	}
+	if wait := d.denoiseInterval - time.Since(d.lastDenoise); wait > 0 {
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+		}
+	}
+	d.lastDenoise = time.Now()
+	return nil
 }
 
 // tick runs one full poll cycle: crash recovery, then process new objects
@@ -518,6 +554,12 @@ func (d *daemon) processJSONL(ctx context.Context, path string, skippedInternal,
 				slog.Int("limit_bytes", maxDenoiseBytes),
 			)
 			continue
+		}
+
+		// Rate-cap denoise calls (evenly spaced) so a backlog burst doesn't
+		// overload the hosted provider. ctx cancellation halts the batch.
+		if err := d.throttleDenoise(ctx); err != nil {
+			return err
 		}
 
 		dr, err := d.denoiser.Denoise(ctx, d.denoiseModel, string(denoiseInput))

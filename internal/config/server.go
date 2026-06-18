@@ -61,6 +61,11 @@ type DenoiseConfig struct {
 	// handles ~150KB events in seconds, so operators can raise this to avoid
 	// dropping substantive coding sessions. Defaults to 81920 (80KB) if unset.
 	MaxEventBytes int `toml:"max_event_bytes"`
+	// MaxCallsPerMinute caps how many denoise requests are issued per minute,
+	// spaced evenly, to keep a hosted provider (MiniMax) under its overload
+	// threshold during large backlog drains — without it a catch-up burst hit
+	// ~120/min and triggered 529s. 0 = unlimited.
+	MaxCallsPerMinute int `toml:"max_calls_per_minute"`
 }
 
 // MiniMaxConfig holds connection settings + the denoise model for the MiniMax
@@ -210,6 +215,9 @@ provider = "ollama"
 # local Ollama; hosted providers (minimax) handle ~150KB+ — raise to keep
 # substantive sessions. Defaults to 81920.
 max_event_bytes = 81920
+# Cap denoise requests per minute (evenly spaced) to stay under a hosted
+# provider's overload threshold during backlog drains. 0 = unlimited.
+max_calls_per_minute = 0
 
 [minimax]
 # Used when denoise.provider = "minimax". Anthropic-Messages-compatible API.

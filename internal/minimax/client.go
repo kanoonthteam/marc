@@ -165,16 +165,21 @@ func (c *client) doOnce(ctx context.Context, body []byte) ([]byte, int, error) {
 	return raw, resp.StatusCode, nil
 }
 
-// isRetryableStatus reports whether an HTTP status is a transient overload/rate
-// condition worth retrying. 529 is MiniMax's "overloaded_error".
+// isRetryableStatus reports whether an HTTP status is a transient server
+// overload worth retrying with backoff. 529 is MiniMax's "overloaded_error".
+//
+// 429 is deliberately NOT retried: on MiniMax it signals a Token-Plan/quota
+// limit ("usage limit reached … purchase Credits"), which short backoff won't
+// fix — retrying just burns attempts. A genuine per-minute rate limit is also
+// better served by failing fast and letting the next 60s poll cycle retry than
+// by ~15s of in-call backoff.
 func isRetryableStatus(code int) bool {
 	switch code {
-	case http.StatusTooManyRequests, // 429
-		http.StatusInternalServerError, // 500
-		http.StatusBadGateway,          // 502
-		http.StatusServiceUnavailable,  // 503
-		http.StatusGatewayTimeout,      // 504
-		529:                            // MiniMax overloaded_error
+	case http.StatusInternalServerError, // 500
+		http.StatusBadGateway,         // 502
+		http.StatusServiceUnavailable, // 503
+		http.StatusGatewayTimeout,     // 504
+		529:                           // MiniMax overloaded_error
 		return true
 	}
 	return false
