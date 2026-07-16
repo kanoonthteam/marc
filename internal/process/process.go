@@ -21,6 +21,7 @@ import (
 	"github.com/caffeaun/marc/internal/minimax"
 	"github.com/caffeaun/marc/internal/minioclient"
 	"github.com/caffeaun/marc/internal/ollama"
+	"github.com/caffeaun/marc/internal/passthrough"
 	"github.com/caffeaun/marc/internal/sqlitedb"
 )
 
@@ -150,6 +151,13 @@ func Run(ctx context.Context, opts Options) error {
 		denoiseClient = minimax.New(opts.Config.MiniMax)
 		denoiseModel = opts.Config.MiniMax.Model
 		logger.Info("process: using minimax denoiser", slog.String("model", denoiseModel))
+	case opts.Config.Denoise.Provider == "none" || opts.Config.Denoise.Provider == "passthrough":
+		// Deterministic, LLM-free extraction: keeps captures flowing into
+		// ClickHouse at zero hosted-denoise spend. Question generation
+		// (claude -p) does the quality filtering downstream.
+		denoiseClient = passthrough.New()
+		denoiseModel = "passthrough"
+		logger.Info("process: using passthrough denoiser (no LLM, zero external calls)")
 	default:
 		denoiseClient = ollama.New(opts.Config.Ollama)
 	}

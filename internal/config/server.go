@@ -209,7 +209,10 @@ endpoint = "http://127.0.0.1:11434"
 denoise_model = "qwen3:8b"
 
 [denoise]
-# Denoise backend: "ollama" (local, default) or "minimax" (hosted API).
+# Denoise backend: "ollama" (local, default), "minimax" (hosted API), or
+# "none"/"passthrough" (deterministic LLM-free extraction — keeps captures
+# flowing into ClickHouse at zero hosted-denoise spend; question generation
+# via claude -p does the quality filtering downstream).
 provider = "ollama"
 # Skip events whose trimmed last message exceeds this many bytes. 80KB suits
 # local Ollama; hosted providers (minimax) handle ~150KB+ — raise to keep
